@@ -24,7 +24,9 @@ vim.api.nvim_set_keymap("n", "<leader>l", ":lua QuickerNewThought()<CR> :lua Qui
 vim.api.nvim_set_keymap("n", "<leader>fl", ":lua QuickerSearchThoughts()<CR>", {})
 
 -- claude hud
-vim.api.nvim_set_keymap("n", "<leader>ch", ":lua HudToggle()<CR>", {})
+vim.api.nvim_set_keymap("n", "<leader>hh", ":lua HudToggle()<CR>", {})
+vim.api.nvim_set_keymap("n", "<leader>hn", ":lua HudNextInstance()<CR>", {})
+vim.api.nvim_set_keymap("n", "<leader>hp", ":lua HudPrevInstance()<CR>", {})
 
 -- fugitive vim Git commands start with g
 vim.api.nvim_set_keymap("n", "<leader>g", ":Git<CR>:resize<CR>", {})

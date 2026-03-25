@@ -15,16 +15,18 @@ local hud_win = nil
 local timer = nil
 local spin_timer = nil
 local was_visible = false
-local width = 36
+local width = 40
 local cached_data = nil
 local session_start = nil
 
 local instance_files = {}
 local current_instance = 1
 local max_tokens_seen = 0
-local prev_confidence = nil
+local prev_confidence = {}   -- keyed by path
 local peak_velocity = 0
-local progress_history = {}
+local progress_history = {}  -- keyed by path
+local token_histories = {}
+local TOKEN_HISTORY_MAX = 30
 local branch_cache = nil
 local branch_ts = 0
 
@@ -71,6 +73,17 @@ local function scan_instances()
   instance_files = active
   current_instance = math.min(current_instance, math.max(1, #instance_files))
   current_data_path = #instance_files > 0 and instance_files[current_instance].path or data_path
+  local active_paths = { [data_path] = true }
+  for _, inst in ipairs(instance_files) do active_paths[inst.path] = true end
+  for p in pairs(token_histories) do
+    if not active_paths[p] then token_histories[p] = nil end
+  end
+  for p in pairs(progress_history) do
+    if not active_paths[p] then progress_history[p] = nil end
+  end
+  for p in pairs(prev_confidence) do
+    if not active_paths[p] then prev_confidence[p] = nil end
+  end
 end
 
 local function count_fresh_instances()
@@ -98,6 +111,27 @@ local function make_bar(value, max)
   local filled = math.floor((value / max) * 10)
   filled = math.max(0, math.min(10, filled))
   return string.rep("█", filled) .. string.rep("░", 10 - filled)
+end
+
+local spark_chars = { "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" }
+
+local function make_sparkline(history, w)
+  w = w or 20
+  local slice = {}
+  local start = math.max(1, #history - w + 1)
+  for i = start, #history do table.insert(slice, history[i]) end
+  while #slice < w do table.insert(slice, 1, 0) end
+  local lo, hi = math.huge, -math.huge
+  for _, v in ipairs(slice) do
+    if v < lo then lo = v end
+    if v > hi then hi = v end
+  end
+  local result = {}
+  for _, v in ipairs(slice) do
+    local idx = (hi == lo) and 1 or math.floor(((v - lo) / (hi - lo)) * 7) + 1
+    table.insert(result, spark_chars[idx])
+  end
+  return table.concat(result)
 end
 
 local function init_session()
@@ -167,10 +201,11 @@ local function get_branch()
   return b
 end
 
-local function get_eta(current_progress)
-  if current_progress >= 100 or #progress_history < 2 then return nil end
-  local oldest = progress_history[1]
-  local newest = progress_history[#progress_history]
+local function get_eta(current_progress, hist)
+  hist = hist or {}
+  if current_progress >= 100 or #hist < 2 then return nil end
+  local oldest = hist[1]
+  local newest = hist[#hist]
   local dt = newest.ts - oldest.ts
   local dp = newest.progress - oldest.progress
   if dt <= 0 or dp <= 0 then return nil end
@@ -189,7 +224,7 @@ local function get_eta(current_progress)
 end
 
 -- Returns lines and highlights: list of { line_idx_0based, hl_name }
-local function render_lines(data)
+local function render_lines(data, tok_history, path)
   local task       = data.task or "no active task"
   local progress   = data.progress or 0
   local confidence = data.confidence or 0
@@ -205,10 +240,11 @@ local function render_lines(data)
   }
 
   local trend, trend_hl = "", nil
-  if prev_confidence ~= nil then
-    if confidence > prev_confidence then
+  local prev_conf = path and prev_confidence[path] or nil
+  if prev_conf ~= nil then
+    if confidence > prev_conf then
       trend, trend_hl = " ↑", "HudTrendUp"
-    elseif confidence < prev_confidence then
+    elseif confidence < prev_conf then
       trend, trend_hl = " ↓", "HudTrendDown"
     else
       trend, trend_hl = " →", "HudTrendFlat"
@@ -223,7 +259,8 @@ local function render_lines(data)
     local display = tokens >= 1000
       and string.format("~%.1fk", tokens / 1000)
       or tostring(tokens)
-    table.insert(lines, string.format(" Tokens     [%s] %s", make_bar(tokens, 200000), display))
+    local spark = make_sparkline(tok_history or {})
+    table.insert(lines, string.format(" Tokens     %s %s", spark, display))
     local hl = tokens > 150000 and "HudTokenDanger"
             or tokens > 100000 and "HudTokenWarn"
             or "HudTokenSafe"
@@ -255,7 +292,7 @@ local function render_lines(data)
     table.insert(lines, string.format(" Session    %s", elapsed))
   end
 
-  local eta = get_eta(progress)
+  local eta = get_eta(progress, path and progress_history[path] or {})
   if eta then
     table.insert(lines, string.format(" ETA        %s", eta))
   end
@@ -298,6 +335,62 @@ local function set_lines(lines)
   vim.api.nvim_set_option_value("modifiable", false, { buf = hud_buf })
 end
 
+-- Compact 1-2 line summary for a non-selected instance
+local function render_compact_instance(inst, idx)
+  local now = os.time()
+  local age = now - inst.mtime
+  local ok, d = pcall(dofile, inst.path)
+  if not ok or type(d) ~= "table" then
+    return { string.format(" · %d  (unreadable)", idx) }, {}
+  end
+  if age > STALE_THRESHOLD then
+    local mins = math.floor(age / 60)
+    return { string.format(" · %d  idle (%dm ago)", idx, mins) }, {}
+  end
+  local task = d.task or "no active task"
+  local progress = d.progress or 0
+  local note = d.note or ""
+  local phase = d.phase
+  local phase_icon = (phase and phase_map[phase]) and phase_map[phase].icon or " "
+  -- truncate task to fit: width - " ⠋ X  " prefix (7 chars) leaves ~33
+  local task_max = width - 7
+  if #task > task_max then task = task:sub(1, task_max - 1) .. "…" end
+  local line1 = string.format(" %s %d  %s", spin_chars[spin_idx], idx, task)
+  -- 5-char mini bar (each char is 3 bytes, build directly to avoid sub on multibyte)
+  local filled = math.max(0, math.min(5, math.floor(progress * 5 / 100)))
+  local minibar = string.rep("█", filled) .. string.rep("░", 5 - filled)
+  local note_max = width - 20
+  if #note > note_max then note = note:sub(1, note_max - 1) .. "…" end
+  local line2 = string.format("    [%s]%3d%% %s  %s", minibar, progress, phase_icon, note)
+  local hls = {}
+  if phase and phase_map[phase] then
+    -- highlight the phase icon on line2 (index 1, 0-based)
+    hls = { { 1, phase_map[phase].hl } }
+  end
+  return { line1, line2 }, hls
+end
+
+local function update_instance_state(path, data)
+  if data.tokens and data.tokens > max_tokens_seen then
+    max_tokens_seen = data.tokens
+  end
+  if data.tokens and data.tokens > 0 then
+    if not token_histories[path] then token_histories[path] = {} end
+    local hist = token_histories[path]
+    table.insert(hist, data.tokens)
+    if #hist > TOKEN_HISTORY_MAX then table.remove(hist, 1) end
+  end
+  if not progress_history[path] then progress_history[path] = {} end
+  local ph = progress_history[path]
+  local p = data.progress or 0
+  local last_p = #ph > 0 and ph[#ph].progress or nil
+  if last_p == nil or p ~= last_p then
+    table.insert(ph, { ts = os.time(), progress = p })
+    if #ph > 20 then table.remove(ph, 1) end
+  end
+  prev_confidence[path] = data.confidence or 0
+end
+
 local function refresh()
   if not is_open() then return end
 
@@ -305,28 +398,36 @@ local function refresh()
   local fresh = count_fresh_instances()
 
   local lines, highlights, w, fg
-  if is_stale() then
+  if is_stale() and #instance_files == 0 then
     lines = { " · idle" }
     highlights = {}
     w = 12
     fg = idle_color
   else
     cached_data = load_data()
-    if cached_data.tokens and cached_data.tokens > max_tokens_seen then
-      max_tokens_seen = cached_data.tokens
-    end
-    local p = cached_data.progress or 0
-    local last_p = #progress_history > 0 and progress_history[#progress_history].progress or nil
-    if last_p == nil or p ~= last_p then
-      table.insert(progress_history, { ts = os.time(), progress = p })
-      if #progress_history > 20 then table.remove(progress_history, 1) end
-    end
+    update_instance_state(current_data_path, cached_data)
     local v = get_velocity()
     if v > peak_velocity then peak_velocity = v end
-    lines, highlights = render_lines(cached_data)
-    prev_confidence = cached_data.confidence or 0
+    lines, highlights = render_lines(cached_data, token_histories[current_data_path], current_data_path)
     w = width
     fg = fresh >= 2 and conflict_color or main_color
+
+    -- Append compact rows for other instances when multiple are active
+    if #instance_files > 1 then
+      table.insert(lines, " " .. string.rep("─", width - 2))
+      -- offset to adjust highlight indices
+      local offset = #lines - 1
+      for i, inst in ipairs(instance_files) do
+        if i ~= current_instance then
+          local clines, chls = render_compact_instance(inst, i)
+          for _, cl in ipairs(clines) do table.insert(lines, cl) end
+          for _, h in ipairs(chls) do
+            table.insert(highlights, { h[1] + offset + 1, h[2] })
+          end
+          offset = offset + #clines
+        end
+      end
+    end
   end
 
   local title
