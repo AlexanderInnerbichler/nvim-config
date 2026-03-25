@@ -1,9 +1,9 @@
 local main_color = "#7fc8f8"
+local context_limit = 200000
 local idle_color = "#555555"
 local conflict_color = "#e5c07b"
 local STALE_THRESHOLD = 600
 local INSTANCE_STALE = 120
-local COST_PER_MTOK = 1.50
 
 local data_path = vim.fn.expand("~/.claude/hud.json")
 local current_data_path = vim.fn.expand("~/.claude/hud.json")
@@ -21,7 +21,6 @@ local session_start = nil
 
 local instance_files = {}
 local current_instance = 1
-local max_tokens_seen = 0
 local prev_confidence = {}   -- keyed by path
 local peak_velocity = 0
 local progress_history = {}  -- keyed by path
@@ -364,12 +363,18 @@ local function render_lines(data, tok_history, path)
             or tokens > 100000 and "HudTokenWarn"
             or "HudTokenSafe"
     table.insert(highlights, { #lines - 1, hl })
-  end
-
-  if max_tokens_seen > 0 then
-    local cost = (max_tokens_seen / 1e6) * COST_PER_MTOK
-    local cost_str = cost < 0.01 and "<$0.01" or string.format("~$%.2f", cost)
-    table.insert(lines, string.format(" Cost       %s", cost_str))
+    local ctx_pct = math.min(100, math.floor((tokens / context_limit) * 100))
+    table.insert(lines, string.format(" Context    [%s] %d%%", make_bar(tokens, context_limit), ctx_pct))
+    local ctx_hl = tokens > context_limit * 0.8 and "HudTokenDanger"
+               or tokens > context_limit * 0.5 and "HudTokenWarn"
+               or "HudTokenSafe"
+    table.insert(highlights, { #lines - 1, ctx_hl })
+    if data.cache_pct and data.cache_pct > 0 then
+      local pct = data.cache_pct
+      local cache_hl = pct >= 70 and "HudTrendUp" or pct >= 40 and "HudTrendFlat" or "HudTrendDown"
+      table.insert(lines, string.format(" Cache      %d%% hit", pct))
+      table.insert(highlights, { #lines - 1, cache_hl })
+    end
   end
 
   local velocity = get_velocity()
@@ -384,6 +389,14 @@ local function render_lines(data, tok_history, path)
   local total_tools = get_total_tools()
   if total_tools > 0 then
     table.insert(lines, string.format(" Tools      %d total", total_tools))
+  end
+
+  local tc_r = data.tc_read or 0
+  local tc_w = data.tc_write or 0
+  local tc_b = data.tc_bash or 0
+  local tc_s = data.tc_search or 0
+  if tc_r + tc_w + tc_b + tc_s > 0 then
+    table.insert(lines, string.format(" Tool mix   R:%d W:%d B:%d S:%d", tc_r, tc_w, tc_b, tc_s))
   end
 
   local elapsed = format_elapsed()
@@ -401,6 +414,22 @@ local function render_lines(data, tok_history, path)
     table.insert(lines, string.format(" Branch     %s", branch))
   end
 
+  if data.model and data.model ~= "" then
+    table.insert(lines, string.format(" Model      %s", data.model:gsub("^claude%-", "")))
+  end
+
+  if data.recent_files and data.recent_files ~= "" then
+    local files = vim.split(data.recent_files, "|", { plain = true })
+    local shown = {}
+    for _, f in ipairs(files) do
+      if f ~= "" then table.insert(shown, f) end
+      if #shown >= 3 then break end
+    end
+    if #shown > 0 then
+      table.insert(lines, " Recent     " .. table.concat(shown, " · "))
+    end
+  end
+
   if phase and phase_map[phase] then
     local p = phase_map[phase]
     table.insert(lines, "")
@@ -408,6 +437,15 @@ local function render_lines(data, tok_history, path)
     table.insert(highlights, { #lines - 1, p.hl })
     if note ~= "" then
       table.insert(lines, "  ↳ " .. note)
+    end
+    if data.note_history and data.note_history ~= "" then
+      local hist = vim.split(data.note_history, "|", { plain = true })
+      for _, h in ipairs(hist) do
+        if h ~= "" then
+          table.insert(lines, "  · " .. h)
+          table.insert(highlights, { #lines - 1, "HudDaily" })
+        end
+      end
     end
   elseif note ~= "" then
     table.insert(lines, "")
@@ -419,10 +457,8 @@ local function render_lines(data, tok_history, path)
     local tok_disp = tok >= 1e6
       and string.format("%.1fM", tok / 1e6)
       or string.format("%dk", math.floor(tok / 1000))
-    local cost = (tok / 1e6) * COST_PER_MTOK
-    local cost_str = cost < 0.01 and "<$0.01" or string.format("$%.2f", cost)
     table.insert(lines, "")
-    table.insert(lines, string.format(" today  %d tasks · %s tok · %s", daily_stats.tasks, tok_disp, cost_str))
+    table.insert(lines, string.format(" today  %d tasks · %s tok", daily_stats.tasks, tok_disp))
     table.insert(highlights, { #lines - 1, "HudDaily" })
   end
 
@@ -486,9 +522,6 @@ local function render_compact_instance(inst, idx)
 end
 
 local function update_instance_state(path, data)
-  if data.tokens and data.tokens > max_tokens_seen then
-    max_tokens_seen = data.tokens
-  end
   if data.tokens and data.tokens > 0 then
     if not token_histories[path] then token_histories[path] = {} end
     local hist = token_histories[path]
