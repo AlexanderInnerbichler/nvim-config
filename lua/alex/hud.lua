@@ -5,8 +5,8 @@ local STALE_THRESHOLD = 600
 local INSTANCE_STALE = 120
 local COST_PER_MTOK = 1.50
 
-local data_path = vim.fn.expand("~/.claude/hud.lua")
-local current_data_path = vim.fn.expand("~/.claude/hud.lua")
+local data_path = vim.fn.expand("~/.claude/hud.json")
+local current_data_path = vim.fn.expand("~/.claude/hud.json")
 local session_path = vim.fn.expand("~/.claude/hud_session.txt")
 local velocity_path = vim.fn.expand("~/.claude/hud_velocity.txt")
 
@@ -29,6 +29,18 @@ local token_histories = {}
 local TOKEN_HISTORY_MAX = 30
 local branch_cache = nil
 local branch_ts = 0
+
+local compact_mode = false
+local daily_stats_path = vim.fn.expand("~/.claude/hud_daily.json")
+local daily_stats = nil
+local daily_stats_last_save = 0
+
+local last_task = {}         -- keyed by path
+local flash_until = {}       -- keyed by path, ms timestamp (vim.uv.now())
+local last_progress_ts = {}  -- keyed by path, os.time() when progress last changed
+local last_progress_val = {} -- keyed by path
+local last_phase = {}        -- keyed by path
+local daily_last_tokens = {} -- keyed by path, for token delta accumulation
 
 local spin_chars = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 local spin_idx = 1
@@ -54,10 +66,13 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "HudTrendUp",     { fg = "#a3be8c", bg = "NONE" })
   vim.api.nvim_set_hl(0, "HudTrendDown",   { fg = "#f07070", bg = "NONE" })
   vim.api.nvim_set_hl(0, "HudTrendFlat",   { fg = "#555555", bg = "NONE" })
+  vim.api.nvim_set_hl(0, "HudFlash",       { bg = "#3d3010", fg = "#f0e080" })
+  vim.api.nvim_set_hl(0, "HudWarn",        { fg = "#e5c07b", bg = "NONE" })
+  vim.api.nvim_set_hl(0, "HudDaily",       { fg = "#616e88", bg = "NONE" })
 end
 
 local function scan_instances()
-  local paths = vim.fn.glob(vim.fn.expand("~/.claude/hud-*.lua"), false, true)
+  local paths = vim.fn.glob(vim.fn.expand("~/.claude/hud-*.json"), false, true)
   if vim.fn.filereadable(data_path) == 1 then
     table.insert(paths, data_path)
   end
@@ -84,6 +99,21 @@ local function scan_instances()
   for p in pairs(prev_confidence) do
     if not active_paths[p] then prev_confidence[p] = nil end
   end
+  for p in pairs(last_task) do
+    if not active_paths[p] then last_task[p] = nil end
+  end
+  for p in pairs(flash_until) do
+    if not active_paths[p] then flash_until[p] = nil end
+  end
+  for p in pairs(last_progress_ts) do
+    if not active_paths[p] then last_progress_ts[p] = nil end
+  end
+  for p in pairs(last_progress_val) do
+    if not active_paths[p] then last_progress_val[p] = nil end
+  end
+  for p in pairs(last_phase) do
+    if not active_paths[p] then last_phase[p] = nil end
+  end
 end
 
 local function count_fresh_instances()
@@ -102,7 +132,11 @@ local function is_stale()
 end
 
 local function load_data()
-  local ok, t = pcall(dofile, current_data_path)
+  local lines = vim.fn.readfile(current_data_path)
+  if not lines or #lines == 0 then
+    return { task = "no active task", progress = 0, confidence = 0 }
+  end
+  local ok, t = pcall(vim.fn.json_decode, table.concat(lines, "\n"))
   if ok and type(t) == "table" then return t end
   return { task = "no active task", progress = 0, confidence = 0 }
 end
@@ -223,6 +257,40 @@ local function get_eta(current_progress, hist)
   end
 end
 
+local function today_str()
+  return os.date("%Y-%m-%d")
+end
+
+local function load_daily_stats()
+  local f = io.open(daily_stats_path, "r")
+  if f then
+    local content = f:read("*a")
+    f:close()
+    local ok, t = pcall(vim.fn.json_decode, content)
+    if ok and type(t) == "table" and t.date == today_str() then
+      return t
+    end
+  end
+  return { date = today_str(), tasks = 0, tokens = 0 }
+end
+
+local function save_daily_stats()
+  if not daily_stats then return end
+  local f = io.open(daily_stats_path, "w")
+  if f then
+    f:write(vim.fn.json_encode(daily_stats))
+    f:close()
+  end
+end
+
+local function notify_done(task)
+  io.write("\a")
+  io.flush()
+  if vim.fn.executable("notify-send") == 1 then
+    vim.fn.jobstart({ "notify-send", "-t", "4000", "Claude Done", task })
+  end
+end
+
 -- Returns lines and highlights: list of { line_idx_0based, hl_name }
 local function render_lines(data, tok_history, path)
   local task       = data.task or "no active task"
@@ -233,11 +301,42 @@ local function render_lines(data, tok_history, path)
   local note       = data.note or ""
   local highlights = {}
 
-  local lines = {
-    " " .. spin_chars[spin_idx] .. " " .. task,
-    "",
-    string.format(" Progress   [%s] %d%%", make_bar(progress, 100), progress),
-  }
+  -- Compact mode: single summary line
+  if compact_mode then
+    local bar_filled = math.max(0, math.min(5, math.floor(progress * 5 / 100)))
+    local minibar = string.rep("█", bar_filled) .. string.rep("░", 5 - bar_filled)
+    local phase_icon = (phase and phase_map[phase]) and (" " .. phase_map[phase].icon) or ""
+    local task_max = 24
+    if #task > task_max then task = task:sub(1, task_max - 1) .. "…" end
+    local line = " " .. spin_chars[spin_idx] .. " " .. task
+      .. string.format(" [%s]%3d%%%s", minibar, progress, phase_icon)
+    local hls = {}
+    if phase and phase_map[phase] then
+      hls = { { 0, phase_map[phase].hl } }
+    end
+    return { line }, hls
+  end
+
+  local ph = path and progress_history[path] or {}
+  local prog_vals = {}
+  for _, e in ipairs(ph) do table.insert(prog_vals, e.progress) end
+  local prog_spark = #prog_vals >= 2 and (" " .. make_sparkline(prog_vals, 8)) or ""
+
+  -- Task line (index 0) — flash highlight when task just changed
+  local task_line = " " .. spin_chars[spin_idx] .. " " .. task
+  local lines = { task_line, "" }
+  if path and flash_until[path] and vim.uv.now() < flash_until[path] then
+    table.insert(highlights, { 0, "HudFlash" })
+  end
+
+  -- Progress line — stuck warning when exec stalls
+  local stuck = phase == "exec" and progress < 100
+    and path and last_progress_ts[path] ~= nil
+    and (os.time() - last_progress_ts[path]) > 480
+  local prog_line = string.format(" Progress   [%s] %d%%%s", make_bar(progress, 100), progress, prog_spark)
+  if stuck then prog_line = prog_line .. "  ⚠ stuck?" end
+  table.insert(lines, prog_line)
+  if stuck then table.insert(highlights, { #lines - 1, "HudWarn" }) end
 
   local trend, trend_hl = "", nil
   local prev_conf = path and prev_confidence[path] or nil
@@ -315,6 +414,18 @@ local function render_lines(data, tok_history, path)
     table.insert(lines, " " .. note)
   end
 
+  if daily_stats and (daily_stats.tasks > 0 or daily_stats.tokens > 0) then
+    local tok = daily_stats.tokens or 0
+    local tok_disp = tok >= 1e6
+      and string.format("%.1fM", tok / 1e6)
+      or string.format("%dk", math.floor(tok / 1000))
+    local cost = (tok / 1e6) * COST_PER_MTOK
+    local cost_str = cost < 0.01 and "<$0.01" or string.format("$%.2f", cost)
+    table.insert(lines, "")
+    table.insert(lines, string.format(" today  %d tasks · %s tok · %s", daily_stats.tasks, tok_disp, cost_str))
+    table.insert(highlights, { #lines - 1, "HudDaily" })
+  end
+
   return lines, highlights
 end
 
@@ -339,7 +450,11 @@ end
 local function render_compact_instance(inst, idx)
   local now = os.time()
   local age = now - inst.mtime
-  local ok, d = pcall(dofile, inst.path)
+  local raw = vim.fn.readfile(inst.path)
+  if not raw or #raw == 0 then
+    return { string.format(" · %d  (unreadable)", idx) }, {}
+  end
+  local ok, d = pcall(vim.fn.json_decode, table.concat(raw, "\n"))
   if not ok or type(d) ~= "table" then
     return { string.format(" · %d  (unreadable)", idx) }, {}
   end
@@ -389,6 +504,41 @@ local function update_instance_state(path, data)
     if #ph > 20 then table.remove(ph, 1) end
   end
   prev_confidence[path] = data.confidence or 0
+
+  -- Task change flash
+  local task = data.task or ""
+  if last_task[path] ~= nil and last_task[path] ~= task then
+    flash_until[path] = vim.uv.now() + 1200
+  end
+  last_task[path] = task
+
+  -- Stuck detection: track last time progress changed
+  local cur_p = data.progress or 0
+  if last_progress_val[path] == nil or last_progress_val[path] ~= cur_p then
+    last_progress_ts[path] = os.time()
+    last_progress_val[path] = cur_p
+  end
+
+  -- Phase transition to done: notify + increment daily task count
+  local cur_phase = data.phase
+  local prev_ph = last_phase[path]
+  if prev_ph ~= nil and prev_ph ~= "done" and cur_phase == "done" then
+    notify_done(data.task or "task complete")
+    if daily_stats then
+      daily_stats.tasks = daily_stats.tasks + 1
+      save_daily_stats()
+    end
+  end
+  last_phase[path] = cur_phase
+
+  -- Daily token accumulation
+  if daily_stats and data.tokens and data.tokens > 0 then
+    local prev_tok = daily_last_tokens[path] or 0
+    if data.tokens > prev_tok then
+      daily_stats.tokens = (daily_stats.tokens or 0) + (data.tokens - prev_tok)
+    end
+    daily_last_tokens[path] = data.tokens
+  end
 end
 
 local function refresh()
@@ -410,7 +560,18 @@ local function refresh()
     if v > peak_velocity then peak_velocity = v end
     lines, highlights = render_lines(cached_data, token_histories[current_data_path], current_data_path)
     w = width
-    fg = fresh >= 2 and conflict_color or main_color
+    local cur_stuck = cached_data.phase == "exec"
+      and (cached_data.progress or 0) < 100
+      and last_progress_ts[current_data_path] ~= nil
+      and (os.time() - last_progress_ts[current_data_path]) > 480
+    fg = (fresh >= 2 or cur_stuck) and conflict_color or main_color
+
+    -- Periodically persist daily stats
+    local now_ts = os.time()
+    if daily_stats and (now_ts - daily_stats_last_save) >= 60 then
+      save_daily_stats()
+      daily_stats_last_save = now_ts
+    end
 
     -- Append compact rows for other instances when multiple are active
     if #instance_files > 1 then
@@ -457,7 +618,20 @@ local function tick_spinner()
   spin_idx = (spin_idx % #spin_chars) + 1
   local task = cached_data.task or "no active task"
   vim.api.nvim_set_option_value("modifiable", true, { buf = hud_buf })
-  vim.api.nvim_buf_set_lines(hud_buf, 0, 1, false, { " " .. spin_chars[spin_idx] .. " " .. task })
+  if compact_mode then
+    local progress = cached_data.progress or 0
+    local phase = cached_data.phase
+    local bar_filled = math.max(0, math.min(5, math.floor(progress * 5 / 100)))
+    local minibar = string.rep("█", bar_filled) .. string.rep("░", 5 - bar_filled)
+    local phase_icon = (phase and phase_map[phase]) and (" " .. phase_map[phase].icon) or ""
+    local task_max = 24
+    if #task > task_max then task = task:sub(1, task_max - 1) .. "…" end
+    local line = " " .. spin_chars[spin_idx] .. " " .. task
+      .. string.format(" [%s]%3d%%%s", minibar, progress, phase_icon)
+    vim.api.nvim_buf_set_lines(hud_buf, 0, 1, false, { line })
+  else
+    vim.api.nvim_buf_set_lines(hud_buf, 0, 1, false, { " " .. spin_chars[spin_idx] .. " " .. task })
+  end
   vim.api.nvim_set_option_value("modifiable", false, { buf = hud_buf })
 end
 
@@ -465,6 +639,7 @@ local function open()
   if is_open() then return end
   setup_highlights()
   if not session_start then init_session() end
+  if not daily_stats then daily_stats = load_daily_stats() end
 
   if not (hud_buf and vim.api.nvim_buf_is_valid(hud_buf)) then
     hud_buf = vim.api.nvim_create_buf(false, true)
@@ -526,6 +701,11 @@ function HudClose() close() end
 function HudToggle()
   if is_open() then close() else open() end
 end
+function HudRefresh() if is_open() then refresh() end end
+function HudToggleCompact()
+  compact_mode = not compact_mode
+  if is_open() then refresh() end
+end
 
 function HudNextInstance()
   scan_instances()
@@ -564,7 +744,7 @@ vim.api.nvim_create_autocmd("InsertLeave", {
 })
 
 local any_hud = vim.fn.filereadable(data_path) == 1
-  or #vim.fn.glob(vim.fn.expand("~/.claude/hud-*.lua"), false, true) > 0
+  or #vim.fn.glob(vim.fn.expand("~/.claude/hud-*.json"), false, true) > 0
 if any_hud then
   vim.defer_fn(open, 100)
 end

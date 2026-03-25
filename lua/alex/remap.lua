@@ -25,6 +25,7 @@ vim.api.nvim_set_keymap("n", "<leader>fl", ":lua QuickerSearchThoughts()<CR>", {
 
 -- claude hud
 vim.api.nvim_set_keymap("n", "<leader>hh", ":lua HudToggle()<CR>", {})
+vim.api.nvim_set_keymap("n", "<leader>hc", ":lua HudToggleCompact()<CR>", {})
 vim.api.nvim_set_keymap("n", "<leader>hn", ":lua HudNextInstance()<CR>", {})
 vim.api.nvim_set_keymap("n", "<leader>hp", ":lua HudPrevInstance()<CR>", {})
 
