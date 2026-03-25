@@ -23,6 +23,9 @@ vim.api.nvim_set_keymap("n", "<leader>cc", ":cclose<CR>", {})
 vim.api.nvim_set_keymap("n", "<leader>l", ":lua QuickerNewThought()<CR> :lua QuickerSetAllMarks()<CR>", {})
 vim.api.nvim_set_keymap("n", "<leader>fl", ":lua QuickerSearchThoughts()<CR>", {})
 
+-- claude plan viewer
+vim.keymap.set("n", "<leader>pv", function() require("alex.plan_viewer").toggle() end, { desc = "Toggle plan viewer" })
+
 -- claude hud
 vim.api.nvim_set_keymap("n", "<leader>hh", ":lua HudToggle()<CR>", {})
 vim.api.nvim_set_keymap("n", "<leader>hc", ":lua HudToggleCompact()<CR>", {})

@@ -5,6 +5,23 @@ local conflict_color = "#e5c07b"
 local STALE_THRESHOLD = 600
 local INSTANCE_STALE = 120
 
+local phase_colors = {
+  study = "#7fc8f8",
+  plan  = "#b48ead",
+  exec  = "#a3be8c",
+  done  = "#4a7c6f",
+}
+local danger_color = "#f07070"
+local danger_dim   = "#7a2020"
+local stuck_color  = "#f0c060"
+local stuck_dim    = "#7a5a10"
+
+local pulse_mode = false
+local pulse_hi   = ""
+local pulse_lo   = ""
+local pulse_tick = 0
+local PULSE_HALF = 5
+
 local data_path = vim.fn.expand("~/.claude/hud.json")
 local current_data_path = vim.fn.expand("~/.claude/hud.json")
 local session_path = vim.fn.expand("~/.claude/hud_session.txt")
@@ -597,7 +614,26 @@ local function refresh()
       and (cached_data.progress or 0) < 100
       and last_progress_ts[current_data_path] ~= nil
       and (os.time() - last_progress_ts[current_data_path]) > 480
-    fg = (fresh >= 2 or cur_stuck) and conflict_color or main_color
+    local ctx_ratio = (cached_data.tokens or 0) / context_limit
+    if ctx_ratio >= 0.85 then
+      fg = danger_color
+      pulse_mode, pulse_hi, pulse_lo = true, danger_color, danger_dim
+    elseif ctx_ratio >= 0.65 then
+      fg = stuck_color
+      pulse_mode = false
+    elseif cur_stuck then
+      fg = stuck_color
+      pulse_mode, pulse_hi, pulse_lo = true, stuck_color, stuck_dim
+    elseif fresh >= 2 then
+      fg = conflict_color
+      pulse_mode = false
+    elseif cached_data.phase and phase_colors[cached_data.phase] then
+      fg = phase_colors[cached_data.phase]
+      pulse_mode = false
+    else
+      fg = main_color
+      pulse_mode = false
+    end
 
     -- Periodically persist daily stats
     local now_ts = os.time()
@@ -649,6 +685,14 @@ end
 local function tick_spinner()
   if not is_open() or is_stale() or not cached_data then return end
   spin_idx = (spin_idx % #spin_chars) + 1
+  if pulse_mode then
+    pulse_tick = pulse_tick + 1
+    if pulse_tick % PULSE_HALF == 0 then
+      local c = (math.floor(pulse_tick / PULSE_HALF) % 2 == 0) and pulse_hi or pulse_lo
+      vim.api.nvim_set_hl(0, "HudBorder", { bg = "NONE", fg = c })
+      vim.api.nvim_set_hl(0, "HudTitle",  { fg = c, bg = "NONE", bold = true })
+    end
+  end
   local task = cached_data.task or "no active task"
   vim.api.nvim_set_option_value("modifiable", true, { buf = hud_buf })
   if compact_mode then
