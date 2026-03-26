@@ -668,12 +668,13 @@ local function refresh()
   end
 
   local ui = vim.api.nvim_list_uis()[1]
+  local plan_offset = require("alex.plan_viewer").win_offset()
   vim.api.nvim_set_hl(0, "HudBorder", { bg = "NONE", fg = fg })
   vim.api.nvim_set_hl(0, "HudTitle",  { fg = fg, bg = "NONE", bold = true })
   vim.api.nvim_win_set_config(hud_win, {
     relative = "editor",
     row = 1,
-    col = ui.width - w - 2,
+    col = ui.width - plan_offset - w - 2,
     width = w,
     height = #lines,
     title = title,
@@ -725,10 +726,11 @@ local function open()
   end
 
   local ui = vim.api.nvim_list_uis()[1]
+  local plan_offset = require("alex.plan_viewer").win_offset()
   hud_win = vim.api.nvim_open_win(hud_buf, false, {
     relative = "editor",
     row = 1,
-    col = ui.width - width - 2,
+    col = ui.width - plan_offset - width - 2,
     width = width,
     height = 1,
     style = "minimal",

@@ -79,4 +79,11 @@ M.setup = function()
 	end)
 end
 
+M.win_offset = function()
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    return vim.api.nvim_win_get_width(state.win) + 1
+  end
+  return 0
+end
+
 return M
