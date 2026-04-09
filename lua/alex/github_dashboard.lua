@@ -406,7 +406,7 @@ local function render_prs(lines, hl_specs, items, prs, err)
       local age    = age_string(pr.created_at)
       local line   = string.format("   #%-4d  %-45s  %-25s  %s%s",
         pr.number, pr.title:sub(1, 45), pr.repo:sub(1, 25), age, draft)
-      table.insert(items, { line = #lines, url = pr.url })
+      table.insert(items, { line = #lines, url = pr.url, kind = "pr", number = pr.number, repo = pr.repo })
       table.insert(lines, line)
       table.insert(hl_specs, { hl = "GhItem", line = #lines - 1, col_s = 0, col_e = 9 })
       table.insert(hl_specs, { hl = "GhMeta", line = #lines - 1, col_s = 57, col_e = -1 })
@@ -434,7 +434,7 @@ local function render_issues(lines, hl_specs, items, issues, err)
       local age  = age_string(iss.created_at)
       local line = string.format("   #%-4d  %-45s  %-25s  %s",
         iss.number, iss.title:sub(1, 45), iss.repo:sub(1, 25), age)
-      table.insert(items, { line = #lines, url = iss.url })
+      table.insert(items, { line = #lines, url = iss.url, kind = "issue", number = iss.number, repo = iss.repo })
       table.insert(lines, line)
       table.insert(hl_specs, { hl = "GhItem", line = #lines - 1, col_s = 0, col_e = 9 })
       table.insert(hl_specs, { hl = "GhMeta", line = #lines - 1, col_s = 57, col_e = -1 })
@@ -606,7 +606,11 @@ local function open_url_at_cursor()
   local cur_line = vim.api.nvim_win_get_cursor(state.win)[1] - 1  -- 0-indexed
   for _, item in ipairs(state.items) do
     if item.line == cur_line then
-      vim.system({ "xdg-open", item.url })
+      if item.kind == "issue" or item.kind == "pr" then
+        require("alex.gh_reader").open(item)
+      else
+        vim.system({ "xdg-open", item.url })
+      end
       return
     end
   end
