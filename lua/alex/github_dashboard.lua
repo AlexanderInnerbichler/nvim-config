@@ -404,8 +404,10 @@ local function render_prs(lines, hl_specs, items, prs, err)
     for _, pr in ipairs(prs) do
       local draft  = pr.is_draft and " [draft]" or ""
       local age    = age_string(pr.created_at)
+      local title  = pr.title:gsub("[\n\r]", " "):sub(1, 45)
+      local repo   = pr.repo:gsub("[\n\r]", " "):sub(1, 25)
       local line   = string.format("   #%-4d  %-45s  %-25s  %s%s",
-        pr.number, pr.title:sub(1, 45), pr.repo:sub(1, 25), age, draft)
+        pr.number, title, repo, age, draft)
       table.insert(items, { line = #lines, url = pr.url, kind = "pr", number = pr.number, repo = pr.repo })
       table.insert(lines, line)
       table.insert(hl_specs, { hl = "GhItem", line = #lines - 1, col_s = 0, col_e = 9 })
@@ -432,8 +434,10 @@ local function render_issues(lines, hl_specs, items, issues, err)
   else
     for _, iss in ipairs(issues) do
       local age  = age_string(iss.created_at)
-      local line = string.format("   #%-4d  %-45s  %-25s  %s",
-        iss.number, iss.title:sub(1, 45), iss.repo:sub(1, 25), age)
+      local title = iss.title:gsub("[\n\r]", " "):sub(1, 45)
+      local repo  = iss.repo:gsub("[\n\r]", " "):sub(1, 25)
+      local line  = string.format("   #%-4d  %-45s  %-25s  %s",
+        iss.number, title, repo, age)
       table.insert(items, { line = #lines, url = iss.url, kind = "issue", number = iss.number, repo = iss.repo })
       table.insert(lines, line)
       table.insert(hl_specs, { hl = "GhItem", line = #lines - 1, col_s = 0, col_e = 9 })

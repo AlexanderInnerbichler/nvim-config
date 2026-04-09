@@ -67,6 +67,10 @@ local function safe_str(v)
   return tostring(v)
 end
 
+local function sl(s)
+  return s:gsub("[\n\r]", " ")
+end
+
 local function safe_list(v)
   if type(v) ~= "table" then return {} end
   return v
@@ -431,14 +435,14 @@ local function render_issue(data)
   table.insert(lines, "")
 
   -- title line
-  local title_line = "  #" .. data.number .. "  " .. data.title
+  local title_line = "  #" .. data.number .. "  " .. sl(data.title)
   table.insert(lines, title_line)
   table.insert(hl_specs, { hl = "GhReaderTitle", line = #lines - 1, col_s = 0, col_e = -1 })
 
   -- meta line: state · author · labels · age
   local state_tag = " " .. data.state .. " "
   local labels_str = #data.labels > 0 and ("  · " .. table.concat(data.labels, " · ")) or ""
-  local meta = "  " .. state_tag .. "  @" .. data.author .. labels_str .. "  ·  " .. age_string(data.created_at)
+  local meta = "  " .. state_tag .. "  @" .. sl(data.author) .. labels_str .. "  ·  " .. age_string(data.created_at)
   table.insert(lines, meta)
   table.insert(hl_specs, { hl = state_hl(data.state), line = #lines - 1, col_s = 2, col_e = 2 + #state_tag })
   table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 2 + #state_tag, col_e = -1 })
@@ -463,20 +467,20 @@ local function render_pr(data)
 
   -- title line
   local draft_tag = data.is_draft and "  [draft]" or ""
-  local title_line = "  #" .. data.number .. "  " .. data.title .. draft_tag
+  local title_line = "  #" .. data.number .. "  " .. sl(data.title) .. draft_tag
   table.insert(lines, title_line)
   table.insert(hl_specs, { hl = "GhReaderTitle", line = #lines - 1, col_s = 0, col_e = -1 })
 
   -- meta: state · author · age
   local state_tag = " " .. data.state .. " "
-  local meta = "  " .. state_tag .. "  @" .. data.author .. "  ·  " .. age_string(data.created_at)
+  local meta = "  " .. state_tag .. "  @" .. sl(data.author) .. "  ·  " .. age_string(data.created_at)
   table.insert(lines, meta)
   table.insert(hl_specs, { hl = state_hl(data.state), line = #lines - 1, col_s = 2, col_e = 2 + #state_tag })
   table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 2 + #state_tag, col_e = -1 })
 
   -- branch line
   local mergeable_icon = data.mergeable == "MERGEABLE" and "✓" or (data.mergeable == "CONFLICTING" and "✗" or "?")
-  local branch_line = "  ⎇  " .. data.head_ref .. " → " .. data.base_ref
+  local branch_line = "  ⎇  " .. sl(data.head_ref) .. " → " .. sl(data.base_ref)
     .. "   merge: " .. mergeable_icon
   table.insert(lines, branch_line)
   table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 0, col_e = -1 })
