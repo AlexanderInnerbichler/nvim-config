@@ -594,8 +594,8 @@ local function fetch_and_render()
       state.data.profile = profile
       login = profile.login
     end
-    done()
     start_secondary_fetches()
+    done()
   end)
 end
 
