@@ -285,7 +285,7 @@ local function fetch_repos(callback)
           full_name   = r.nameWithOwner,
           url         = r.url,
           description = r.description or "",
-          language    = r.primaryLanguage and r.primaryLanguage.name or "",
+          language    = type(r.primaryLanguage) == "table" and r.primaryLanguage.name or "",
           stars       = r.stargazerCount or 0,
           is_private  = r.isPrivate,
           updated_at  = r.pushedAt,
