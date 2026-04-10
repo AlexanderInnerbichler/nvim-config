@@ -6,6 +6,7 @@ require("alex.plan_viewer")
 require("alex.github_dashboard").setup()
 require("alex.gh_reader").setup()
 require("alex.gh_watchlist").setup()
+require("alex.gh_user_watchlist").setup()
 vim.cmd("set number")
 vim.cmd("set foldmethod=indent")
 vim.opt.laststatus = 3

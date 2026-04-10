@@ -384,6 +384,44 @@ local function fetch_team_activity(callback)
   )
 end
 
+local function fetch_watched_users_activity(callback)
+  local users = require("alex.gh_user_watchlist").get_users()
+  if not users or #users == 0 then callback(nil, nil) return end
+  local pending    = #users
+  local all_events = {}
+  local last_err
+  for _, username in ipairs(users) do
+    run_gh(
+      { "gh", "api", "/users/" .. username .. "/events",
+        "--jq", "[.[] | {type, actor: .actor.login, repo: .repo.name, created_at, pr_number: .payload.pull_request.number, issue_number: .payload.issue.number}] | .[0:20]" },
+      function(ferr, events)
+        if ferr then
+          last_err = ferr
+        else
+          for _, ev in ipairs(events or {}) do
+            table.insert(all_events, ev)
+          end
+        end
+        pending = pending - 1
+        if pending == 0 then
+          table.sort(all_events, function(a, b)
+            return (a.created_at or "") > (b.created_at or "")
+          end)
+          local top = {}
+          for i = 1, math.min(10, #all_events) do
+            top[i] = all_events[i]
+          end
+          if #top == 0 and last_err then
+            callback(last_err, nil)
+          else
+            callback(nil, top)
+          end
+        end
+      end
+    )
+  end
+end
+
 -- ── render functions ───────────────────────────────────────────────────────
 
 local function separator(width)
@@ -671,6 +709,51 @@ local function render_team_activity(lines, hl_specs, items, team_events, err)
   table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
 end
 
+local function render_watched_users(lines, hl_specs, items, events, err)
+  if not err and events == nil then return end
+
+  local header = "  Watched Users"
+  table.insert(lines, header)
+  table.insert(hl_specs, { hl = "GhSection", line = #lines - 1, col_s = 0, col_e = #header })
+
+  if err then
+    local msg = "  ✗ " .. sl(err)
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
+  elseif #events == 0 then
+    local msg = "   No recent activity from watched users"
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhEmpty", line = #lines - 1, col_s = 0, col_e = #msg })
+  else
+    for _, ev in ipairs(events) do
+      local actor = sl(ev.actor or "?"):sub(1, 18)
+      local icon  = EVENT_ICONS[ev.type] or "·"
+      local repo  = sl(ev.repo or "?"):sub(1, 30)
+      local age   = age_string(ev.created_at)
+      local line  = string.format("   %-18s  %s  %-30s  %s", actor, icon, repo, age)
+      if ev.type == "PullRequestEvent" and ev.pr_number and ev.pr_number ~= vim.NIL then
+        table.insert(items, { line = #lines, kind = "pr", number = ev.pr_number, repo = ev.repo })
+      elseif ev.type == "IssuesEvent" and ev.issue_number and ev.issue_number ~= vim.NIL then
+        table.insert(items, { line = #lines, kind = "issue", number = ev.issue_number, repo = ev.repo })
+      else
+        table.insert(items, { line = #lines, kind = "push", url = "https://github.com/" .. (ev.repo or "") })
+      end
+      table.insert(lines, line)
+      local icon_hl = "GhStats"
+      if ev.type == "PushEvent"        then icon_hl = "GhPush"
+      elseif ev.type == "PullRequestEvent" then icon_hl = "GhPR"
+      elseif ev.type == "IssuesEvent" or ev.type == "IssueCommentEvent" then icon_hl = "GhIssue"
+      end
+      local icon_col = 3 + 18 + 2
+      table.insert(hl_specs, { hl = icon_hl,   line = #lines - 1, col_s = icon_col, col_e = icon_col + #icon })
+      table.insert(hl_specs, { hl = "GhStats", line = #lines - 1, col_s = 3,        col_e = 3 + 18 })
+      table.insert(hl_specs, { hl = "GhMeta",  line = #lines - 1, col_s = icon_col + #icon + 2 + 30 + 2, col_e = -1 })
+    end
+  end
+  table.insert(lines, separator())
+  table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
+end
+
 -- ── main render ────────────────────────────────────────────────────────────
 
 local function apply_render()
@@ -693,6 +776,7 @@ local function apply_render()
   render_repos(lines, hl_specs, items, data.repos, data.repos_err)
   render_org_repos(lines, hl_specs, items, data.org_repos, data.org_repos_err)
   render_team_activity(lines, hl_specs, items, data.team_events, data.team_events_err)
+  render_watched_users(lines, hl_specs, items, data.watched_events, data.watched_events_err)
 
   state.items = items
 
@@ -728,7 +812,7 @@ local function fetch_and_render()
   local login = state.data and state.data.profile and state.data.profile.login
 
   local function start_secondary_fetches()
-    pending = pending + 5
+    pending = pending + 6
     fetch_prs(function(err, prs)
       if err then state.data.prs_err = err else state.data.prs = prs end
       done(err ~= nil)
@@ -747,6 +831,10 @@ local function fetch_and_render()
     end)
     fetch_team_activity(function(err, events)
       if err then state.data.team_events_err = err else state.data.team_events = events end
+      done(err ~= nil)
+    end)
+    fetch_watched_users_activity(function(err, events)
+      if err then state.data.watched_events_err = err else state.data.watched_events = events end
       done(err ~= nil)
     end)
     if login then
