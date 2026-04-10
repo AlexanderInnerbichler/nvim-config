@@ -349,12 +349,15 @@ local function fetch_team_activity(callback)
       if not orgs or #orgs == 0 then callback(nil, {}) return end
       local pending    = #orgs
       local all_events = {}
+      local last_err
       for _, org in ipairs(orgs) do
         run_gh(
           { "gh", "api", "/orgs/" .. org.login .. "/events",
             "--jq", "[.[] | {type, actor: .actor.login, repo: .repo.name, created_at, pr_number: .payload.pull_request.number, issue_number: .payload.issue.number}]" },
           function(ferr, events)
-            if not ferr then
+            if ferr then
+              last_err = ferr
+            else
               for _, ev in ipairs(events or {}) do
                 table.insert(all_events, ev)
               end
@@ -368,7 +371,11 @@ local function fetch_team_activity(callback)
               for i = 1, math.min(10, #all_events) do
                 top[i] = all_events[i]
               end
-              callback(nil, top)
+              if #top == 0 and last_err then
+                callback(last_err, nil)
+              else
+                callback(nil, top)
+              end
             end
           end
         )
