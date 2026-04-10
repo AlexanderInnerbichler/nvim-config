@@ -478,7 +478,7 @@ local function render_prs(lines, hl_specs, items, prs, err)
       local repo   = pr.repo:gsub("[\n\r]", " "):sub(1, 25)
       local line   = string.format("   #%-4d  %-45s  %-25s  %s%s",
         pr.number, title, repo, age, draft)
-      table.insert(items, { line = #lines, url = pr.url, kind = "pr", number = pr.number, repo = pr.repo })
+      table.insert(items, { line = #lines, url = pr.url, kind = "pr", number = pr.number, repo = pr.repo, title = pr.title })
       table.insert(lines, line)
       table.insert(hl_specs, { hl = "GhItem", line = #lines - 1, col_s = 0, col_e = 9 })
       table.insert(hl_specs, { hl = "GhMeta", line = #lines - 1, col_s = 57, col_e = -1 })
@@ -906,10 +906,22 @@ local function open_win()
     end
   end
 
+  local function open_diff_at_cursor()
+    if not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
+    local cur_line = vim.api.nvim_win_get_cursor(state.win)[1] - 1
+    for _, item in ipairs(state.items) do
+      if item.line == cur_line and item.kind == "pr" then
+        require("alex.gh_reader").open_diff(item)
+        return
+      end
+    end
+  end
+
   buf_map("q",     close_win)
   buf_map("<Esc>", close_win)
   buf_map("<CR>",  open_url_at_cursor)
   buf_map("o",     open_url_at_cursor)
+  buf_map("d",     open_diff_at_cursor)
   buf_map("w",     toggle_watch_at_cursor)
   buf_map("r", function()
     vim.uv.fs_unlink(cache_path, function() end)

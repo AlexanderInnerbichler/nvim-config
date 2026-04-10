@@ -42,6 +42,9 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "GhReviewApproved", { fg = "#a3be8c"                             })
   vim.api.nvim_set_hl(0, "GhReviewChanges",  { fg = "#e06c75"                             })
   vim.api.nvim_set_hl(0, "GhReviewComment",  { fg = "#616e88"                             })
+  vim.api.nvim_set_hl(0, "GhDiffAdd",        { fg = "#98c379"                             })
+  vim.api.nvim_set_hl(0, "GhDiffDel",        { fg = "#e06c75"                             })
+  vim.api.nvim_set_hl(0, "GhDiffHunk",       { fg = "#61afef"                             })
 end
 
 -- ── helpers ────────────────────────────────────────────────────────────────
@@ -849,6 +852,75 @@ function M.open(item)
       render_readme({ full_name = item.full_name, body = body })
     end)
   end
+end
+
+-- ── diff viewer ────────────────────────────────────────────────────────────
+
+local function fetch_diff(number, repo, callback)
+  vim.system(
+    { "gh", "pr", "diff", tostring(number), "--repo", repo },
+    { text = true },
+    function(result)
+      vim.schedule(function()
+        if result.code ~= 0 then
+          callback(result.stderr or "gh error", nil)
+        else
+          callback(nil, result.stdout or "")
+        end
+      end)
+    end
+  )
+end
+
+local function render_diff_content(lines, hl_specs, number, repo, diff_text, err)
+  local crumb_prefix = "  GitHub Dashboard  ›  "
+  local crumb        = crumb_prefix .. repo .. "  ›  PR #" .. number .. " diff"
+  table.insert(lines, crumb)
+  table.insert(hl_specs, { hl = "GhReaderBreadcrumb", line = #lines - 1, col_s = 0,             col_e = #crumb_prefix })
+  table.insert(hl_specs, { hl = "GhReaderTitle",      line = #lines - 1, col_s = #crumb_prefix, col_e = -1 })
+  table.insert(lines, "")
+
+  if err then
+    local msg = "  ✗ " .. err:gsub("[\n\r]", " ")
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhReaderError", line = #lines - 1, col_s = 0, col_e = #msg })
+    return
+  end
+
+  if diff_text == "" then
+    local msg = "  (no diff)"
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhReaderEmpty", line = #lines - 1, col_s = 0, col_e = #msg })
+    return
+  end
+
+  for line in diff_text:gmatch("[^\n]+") do
+    table.insert(lines, line)
+    local ln = #lines - 1
+    if line:match("^@@") then
+      table.insert(hl_specs, { hl = "GhDiffHunk", line = ln, col_s = 0, col_e = -1 })
+    elseif line:sub(1, 1) == "+" and not line:match("^%+%+%+") then
+      table.insert(hl_specs, { hl = "GhDiffAdd",  line = ln, col_s = 0, col_e = -1 })
+    elseif line:sub(1, 1) == "-" and not line:match("^%-%-%-") then
+      table.insert(hl_specs, { hl = "GhDiffDel",  line = ln, col_s = 0, col_e = -1 })
+    end
+  end
+end
+
+M.open_diff = function(item)
+  local title  = string.format(" PR #%d diff ", item.number)
+  open_popup(title, " q close ")
+  vim.wo[state.win].wrap = false
+
+  write_buf({ "", "  Loading diff…" }, {})
+
+  fetch_diff(item.number, item.repo, function(err, diff_text)
+    local lines, hl_specs = {}, {}
+    table.insert(lines, "")
+    render_diff_content(lines, hl_specs, item.number, item.repo, diff_text or "", err)
+    table.insert(lines, "")
+    write_buf(lines, hl_specs)
+  end)
 end
 
 function M.setup()
