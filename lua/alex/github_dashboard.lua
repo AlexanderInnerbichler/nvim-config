@@ -4,7 +4,7 @@ local M = {}
 
 local CACHE_TTL = 300  -- 5 minutes
 local HEATMAP_WEEKS = 52
-local TIER_CHARS = { " ", "░", "▒", "▓", "█", "󰌽"}
+local TIER_CHARS = { " ", "░", "▒", "▓", "█", "󰵿"}
 local TIER_THRESHOLDS = { 0, 1, 4, 10, 20, 35 }
 
 local EVENT_ICONS = {
