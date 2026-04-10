@@ -61,7 +61,7 @@ local function age_string(iso8601)
   if not iso8601 then return "" end
   local y, mo, d, h, mi, s = iso8601:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
   if not y then return "" end
-  local t = os.time({ year = y, month = mo, day = d, hour = h, min = mi, sec = s })
+  local t = os.time({ year = y, month = mo, day = d, hour = h, min = mi, sec = s, isdst = false })
   local diff = os.time(os.date("!*t")) - t
   if diff < 3600 then
     return math.floor(diff / 60) .. "m ago"

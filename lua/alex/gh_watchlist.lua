@@ -192,11 +192,34 @@ local function poll_repo(entry)
         entry.last_seen_id = tostring(events[1].id)
         save_watchlist()
         for _, ev in ipairs(new_events) do
-          show_notification(entry.owner .. "/" .. entry.repo, ev)
+          local ok, err = pcall(show_notification, entry.owner .. "/" .. entry.repo, ev)
+          if not ok then
+            vim.notify("watchlist: notif error — " .. tostring(err), vim.log.levels.WARN)
+          end
         end
       end
     end
   )
+end
+
+local function seed_history()
+  for _, entry in ipairs(state.repos) do
+    run_gh(
+      { "gh", "api",
+        "repos/" .. entry.owner .. "/" .. entry.repo .. "/events",
+        "--jq", "[.[] | {id,type,created_at,payload}] | .[0:5]" },
+      function(events)
+        if not events or type(events) ~= "table" then return end
+        local repo_key = entry.owner .. "/" .. entry.repo
+        for _, ev in ipairs(events) do
+          table.insert(state.history, { _repo = repo_key, _ev = ev })
+        end
+        while #state.history > MAX_HISTORY do
+          table.remove(state.history)
+        end
+      end
+    )
+  end
 end
 
 local function poll()
@@ -527,6 +550,7 @@ M.setup = function()
   setup_highlights()
   vim.fn.mkdir(vim.fn.fnamemodify(WATCHLIST_PATH, ":h"), "p")
   load_watchlist()
+  seed_history()
   state.poll_timer = vim.uv.new_timer()
   state.poll_timer:start(POLL_DELAY_MS, POLL_REPEAT_MS, vim.schedule_wrap(poll))
   vim.api.nvim_create_autocmd("ColorScheme", {
