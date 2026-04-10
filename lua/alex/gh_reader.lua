@@ -20,12 +20,12 @@ local state = {
 local ns = vim.api.nvim_create_namespace("GhReader")
 
 local function setup_highlights()
-  vim.api.nvim_set_hl(0, "GhReaderTitle",    { fg = "#7fc8f8", bold = true,   bg = "NONE" })
+  -- GhReaderTitle removed: render-markdown.nvim H1 styling replaces it
   vim.api.nvim_set_hl(0, "GhReaderMeta",     { fg = "#4b5263",                bg = "NONE" })
   vim.api.nvim_set_hl(0, "GhReaderStateOpen",   { fg = "#a3be8c", bold = true, bg = "NONE" })
   vim.api.nvim_set_hl(0, "GhReaderStateClosed", { fg = "#e06c75", bold = true, bg = "NONE" })
   vim.api.nvim_set_hl(0, "GhReaderStateMerged", { fg = "#b48ead", bold = true, bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReaderSection",  { fg = "#88c0d0", bold = true,   bg = "NONE" })
+  -- GhReaderSection removed: render-markdown.nvim H2 styling replaces it
   vim.api.nvim_set_hl(0, "GhReaderSep",      { fg = "#3b4048",                bg = "NONE" })
   vim.api.nvim_set_hl(0, "GhReaderBody",     { fg = "#abb2bf",                bg = "NONE" })
   vim.api.nvim_set_hl(0, "GhReaderEmpty",    { fg = "#4b5263", italic = true, bg = "NONE" })
