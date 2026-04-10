@@ -66,7 +66,7 @@
 
 ## Phase 6: Polish
 
-- [ ] T008 Smoke-test all eight verification scenarios from plan.md and commit all changes on branch `016-pr-review-comments-hud`
+- [X] T008 Smoke-test all eight verification scenarios from plan.md and commit all changes on branch `016-pr-review-comments-hud`
 
 ---
 
