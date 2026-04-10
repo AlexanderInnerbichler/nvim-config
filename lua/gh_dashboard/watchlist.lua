@@ -417,19 +417,19 @@ local function open_event(repo, ev)
   if ev.type == "PullRequestEvent" then
     local num = type(p.pull_request) == "table" and p.pull_request.number or nil
     if num then
-      require("alex.gh_reader").open({ kind = "pr", number = num, repo = repo })
+      require("gh_dashboard.reader").open({ kind = "pr", number = num, repo = repo })
       return
     end
   elseif ev.type == "IssuesEvent" then
     local num = type(p.issue) == "table" and p.issue.number or nil
     if num then
-      require("alex.gh_reader").open({ kind = "issue", number = num, repo = repo })
+      require("gh_dashboard.reader").open({ kind = "issue", number = num, repo = repo })
       return
     end
   elseif ev.type == "IssueCommentEvent" then
     local num = type(p.issue) == "table" and p.issue.number or nil
     if num then
-      require("alex.gh_reader").open({ kind = "issue", number = num, repo = repo })
+      require("gh_dashboard.reader").open({ kind = "issue", number = num, repo = repo })
       return
     end
   end

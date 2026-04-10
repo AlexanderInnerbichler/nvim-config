@@ -1,5 +1,5 @@
 local M = {}
-local heatmap = require("alex.gh_heatmap")
+local heatmap = require("gh_dashboard.heatmap")
 
 local ns = vim.api.nvim_create_namespace("GhUserProfile")
 
@@ -168,7 +168,7 @@ M.open = function(username)
     local cur_line = vim.api.nvim_win_get_cursor(win)[1] - 1
     for _, item in ipairs(popup_items) do
       if item.line == cur_line and item.kind == "day" then
-        require("alex.gh_day_activity").open(item.username, item.date)
+        require("gh_dashboard.day_activity").open(item.username, item.date)
         return
       end
     end

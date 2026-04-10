@@ -1,5 +1,5 @@
 local M = {}
-local heatmap = require("alex.gh_heatmap")
+local heatmap = require("gh_dashboard.heatmap")
 
 -- ── constants ──────────────────────────────────────────────────────────────
 
@@ -374,7 +374,7 @@ local function fetch_team_activity(callback)
 end
 
 local function fetch_watched_users_activity(callback)
-  local users = require("alex.gh_user_watchlist").get_users()
+  local users = require("gh_dashboard.user_watchlist").get_users()
   if not users or #users == 0 then callback(nil, nil) return end
   local pending    = #users
   local all_events = {}
@@ -836,11 +836,11 @@ local function open_url_at_cursor()
   for _, item in ipairs(state.items) do
     if item.line == cur_line then
       if item.kind == "issue" or item.kind == "pr" or item.kind == "repo" then
-        require("alex.gh_reader").open(item)
+        require("gh_dashboard.reader").open(item)
       elseif item.kind == "user" then
-        require("alex.gh_user_profile").open(item.username)
+        require("gh_dashboard.user_profile").open(item.username)
       elseif item.kind == "day" then
-        require("alex.gh_day_activity").open(item.username, item.date)
+        require("gh_dashboard.day_activity").open(item.username, item.date)
       else
         vim.system({ "xdg-open", item.url })
       end
@@ -903,7 +903,7 @@ local function open_win()
     local cur_line = vim.api.nvim_win_get_cursor(state.win)[1] - 1  -- 0-indexed
     for _, item in ipairs(state.items) do
       if item.line == cur_line and item.full_name then
-        require("alex.gh_watchlist").toggle_repo(item.full_name)
+        require("gh_dashboard.watchlist").toggle_repo(item.full_name)
         return
       end
     end
@@ -914,7 +914,7 @@ local function open_win()
     local cur_line = vim.api.nvim_win_get_cursor(state.win)[1] - 1
     for _, item in ipairs(state.items) do
       if item.line == cur_line and item.kind == "pr" then
-        require("alex.gh_reader").open_diff(item)
+        require("gh_dashboard.reader").open_diff(item)
         return
       end
     end
