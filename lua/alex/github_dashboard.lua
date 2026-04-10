@@ -309,7 +309,7 @@ local function fetch_org_repos(callback)
       local any_err
       for _, org in ipairs(orgs) do
         run_gh(
-          { "gh", "repo", "list", "--owner", org.login, "--limit", "10",
+          { "gh", "repo", "list", org.login, "--limit", "10",
             "--json", "name,nameWithOwner,url,primaryLanguage,stargazerCount,isPrivate,pushedAt" },
           function(ferr, repos)
             if ferr then
