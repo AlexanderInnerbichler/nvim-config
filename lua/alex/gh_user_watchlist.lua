@@ -187,7 +187,7 @@ local function open_manager()
     border     = "rounded",
     title      = " Watched Users ",
     title_pos  = "center",
-    footer     = " a add  ·  d remove  ·  q close ",
+    footer     = " a add  ·  d remove  ·  <CR> profile  ·  q close ",
     footer_pos = "center",
   })
   vim.wo[state.manager_win].number         = false
@@ -205,6 +205,14 @@ local function open_manager()
   bmap("x",     remove_at_cursor)
   bmap("q",     close_manager)
   bmap("<Esc>", close_manager)
+  bmap("<CR>", function()
+    if not state.manager_win or not vim.api.nvim_win_is_valid(state.manager_win) then return end
+    local cur = vim.api.nvim_win_get_cursor(state.manager_win)[1]
+    local idx = cur - 1  -- line 1 = "", line 2 = first user
+    if idx >= 1 and idx <= #state.users then
+      require("alex.gh_user_profile").open(state.users[idx])
+    end
+  end)
 
   vim.api.nvim_create_autocmd("BufWipeout", {
     buffer = state.manager_buf, once = true,

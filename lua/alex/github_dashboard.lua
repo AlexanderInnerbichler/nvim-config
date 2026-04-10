@@ -725,29 +725,50 @@ local function render_watched_users(lines, hl_specs, items, events, err)
     table.insert(lines, msg)
     table.insert(hl_specs, { hl = "GhEmpty", line = #lines - 1, col_s = 0, col_e = #msg })
   else
+    -- group events by actor, preserving first-appearance order
+    local actor_order  = {}
+    local actor_events = {}
     for _, ev in ipairs(events) do
-      local actor = sl(ev.actor or "?"):sub(1, 18)
-      local icon  = EVENT_ICONS[ev.type] or "·"
-      local repo  = sl(ev.repo or "?"):sub(1, 30)
-      local age   = age_string(ev.created_at)
-      local line  = string.format("   %-18s  %s  %-30s  %s", actor, icon, repo, age)
-      if ev.type == "PullRequestEvent" and ev.pr_number and ev.pr_number ~= vim.NIL then
-        table.insert(items, { line = #lines, kind = "pr", number = ev.pr_number, repo = ev.repo })
-      elseif ev.type == "IssuesEvent" and ev.issue_number and ev.issue_number ~= vim.NIL then
-        table.insert(items, { line = #lines, kind = "issue", number = ev.issue_number, repo = ev.repo })
-      else
-        table.insert(items, { line = #lines, kind = "push", url = "https://github.com/" .. (ev.repo or "") })
+      local actor = sl(ev.actor or "?")
+      if not actor_events[actor] then
+        table.insert(actor_order, actor)
+        actor_events[actor] = {}
       end
-      table.insert(lines, line)
-      local icon_hl = "GhStats"
-      if ev.type == "PushEvent"        then icon_hl = "GhPush"
-      elseif ev.type == "PullRequestEvent" then icon_hl = "GhPR"
-      elseif ev.type == "IssuesEvent" or ev.type == "IssueCommentEvent" then icon_hl = "GhIssue"
+      table.insert(actor_events[actor], ev)
+    end
+
+    for _, actor in ipairs(actor_order) do
+      -- actor header row — <CR> opens profile popup
+      local actor_line = "   @" .. actor
+      table.insert(items, { line = #lines, kind = "user", username = actor })
+      table.insert(lines, actor_line)
+      table.insert(hl_specs, { hl = "GhSection",  line = #lines - 1, col_s = 0, col_e = 4 })
+      table.insert(hl_specs, { hl = "GhUsername", line = #lines - 1, col_s = 4, col_e = #actor_line })
+
+      -- events for this actor (indented, no actor column)
+      for _, ev in ipairs(actor_events[actor]) do
+        local icon = EVENT_ICONS[ev.type] or "·"
+        local repo = sl(ev.repo or "?"):sub(1, 32)
+        local age  = age_string(ev.created_at)
+        local line = string.format("      %s  %-32s  %s", icon, repo, age)
+        if ev.type == "PullRequestEvent" and ev.pr_number and ev.pr_number ~= vim.NIL then
+          table.insert(items, { line = #lines, kind = "pr", number = ev.pr_number, repo = ev.repo })
+        elseif ev.type == "IssuesEvent" and ev.issue_number and ev.issue_number ~= vim.NIL then
+          table.insert(items, { line = #lines, kind = "issue", number = ev.issue_number, repo = ev.repo })
+        else
+          table.insert(items, { line = #lines, kind = "push", url = "https://github.com/" .. (ev.repo or "") })
+        end
+        table.insert(lines, line)
+        local icon_hl = "GhStats"
+        if ev.type == "PushEvent"        then icon_hl = "GhPush"
+        elseif ev.type == "PullRequestEvent" then icon_hl = "GhPR"
+        elseif ev.type == "IssuesEvent" or ev.type == "IssueCommentEvent" then icon_hl = "GhIssue"
+        end
+        local icon_col = 6  -- 6 spaces indent
+        local meta_col = icon_col + #icon + 2 + 32 + 2
+        table.insert(hl_specs, { hl = icon_hl,   line = #lines - 1, col_s = icon_col, col_e = icon_col + #icon })
+        table.insert(hl_specs, { hl = "GhMeta",  line = #lines - 1, col_s = meta_col, col_e = -1 })
       end
-      local icon_col = 3 + 18 + 2
-      table.insert(hl_specs, { hl = icon_hl,   line = #lines - 1, col_s = icon_col, col_e = icon_col + #icon })
-      table.insert(hl_specs, { hl = "GhStats", line = #lines - 1, col_s = 3,        col_e = 3 + 18 })
-      table.insert(hl_specs, { hl = "GhMeta",  line = #lines - 1, col_s = icon_col + #icon + 2 + 30 + 2, col_e = -1 })
     end
   end
   table.insert(lines, separator())
@@ -873,6 +894,8 @@ local function open_url_at_cursor()
     if item.line == cur_line then
       if item.kind == "issue" or item.kind == "pr" or item.kind == "repo" then
         require("alex.gh_reader").open(item)
+      elseif item.kind == "user" then
+        require("alex.gh_user_profile").open(item.username)
       else
         vim.system({ "xdg-open", item.url })
       end
