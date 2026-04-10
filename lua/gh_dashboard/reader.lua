@@ -145,7 +145,7 @@ local function register_keymaps()
   end
   local function back()
     close_popup()
-    require("alex.github_dashboard").focus_win()
+    require("gh_dashboard").focus_win()
   end
   bmap("q",     back)
   bmap("<Esc>", back)

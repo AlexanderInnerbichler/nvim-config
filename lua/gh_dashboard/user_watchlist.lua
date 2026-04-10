@@ -210,7 +210,7 @@ local function open_manager()
     local cur = vim.api.nvim_win_get_cursor(state.manager_win)[1]
     local idx = cur - 1  -- line 1 = "", line 2 = first user
     if idx >= 1 and idx <= #state.users then
-      require("alex.gh_user_profile").open(state.users[idx])
+      require("gh_dashboard.user_profile").open(state.users[idx])
     end
   end)
 
