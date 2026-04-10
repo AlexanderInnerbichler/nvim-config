@@ -168,8 +168,8 @@ end
 
 local function fetch_prs(callback)
   run_gh(
-    { "gh", "pr", "list", "--author", "@me", "--state", "open",
-      "--json", "number,title,headRepository,url,createdAt,isDraft" },
+    { "gh", "search", "prs", "--author", "@me", "--state", "open",
+      "--json", "number,title,repository,url,createdAt,isDraft" },
     function(err, data)
       if err then callback(err, nil) return end
       local prs = {}
@@ -177,7 +177,7 @@ local function fetch_prs(callback)
         table.insert(prs, {
           number     = pr.number,
           title      = pr.title,
-          repo       = (pr.headRepository or {}).nameWithOwner or repo_from_url(pr.url),
+          repo       = type(pr.repository) == "table" and pr.repository.nameWithOwner or repo_from_url(pr.url),
           url        = pr.url,
           created_at = pr.createdAt,
           is_draft   = pr.isDraft,
@@ -190,8 +190,8 @@ end
 
 local function fetch_issues(callback)
   run_gh(
-    { "gh", "issue", "list", "--assignee", "@me", "--state", "open",
-      "--json", "number,title,url,createdAt" },
+    { "gh", "search", "issues", "--assignee", "@me", "--state", "open",
+      "--json", "number,title,repository,url,createdAt" },
     function(err, data)
       if err then callback(err, nil) return end
       local issues = {}
@@ -199,7 +199,7 @@ local function fetch_issues(callback)
         table.insert(issues, {
           number     = iss.number,
           title      = iss.title,
-          repo       = repo_from_url(iss.url),
+          repo       = type(iss.repository) == "table" and iss.repository.nameWithOwner or repo_from_url(iss.url),
           url        = iss.url,
           created_at = iss.createdAt,
         })
