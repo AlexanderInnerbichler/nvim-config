@@ -265,8 +265,8 @@ local function open_popup(title, footer)
     return
   end
   local ui     = vim.api.nvim_list_uis()[1] or { width = 180, height = 50 }
-  local width  = math.floor(ui.width  * 0.80)
-  local height = math.floor(ui.height * 0.85)
+  local width  = math.floor(ui.width  * 0.90)
+  local height = math.floor(ui.height * 0.90)
   local row    = math.floor((ui.height - height) / 2)
   local col    = math.floor((ui.width  - width)  / 2)
   state.win = vim.api.nvim_open_win(state.buf, true, {
