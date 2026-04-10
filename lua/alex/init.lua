@@ -1,4 +1,3 @@
-require("alex.packer")
 require("alex.remap")
 require("alex.quicker")
 require("alex.hud")
