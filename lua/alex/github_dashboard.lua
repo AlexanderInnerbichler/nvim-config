@@ -302,6 +302,8 @@ local function separator(width)
   return "  " .. string.rep("─", (width or 60) - 2)
 end
 
+local function sl(s) return (s or ""):gsub("[\n\r]", " ") end
+
 local function render_profile(lines, hl_specs, profile, total_contrib, win_width)
   local loading_tag = state.is_loading and "  [loading…]" or ""
   local stale_tag   = state.is_stale   and "  [stale]"    or ""
@@ -393,7 +395,7 @@ local function render_prs(lines, hl_specs, items, prs, err)
   table.insert(hl_specs, { hl = "GhSection", line = #lines - 1, col_s = 0, col_e = #header })
 
   if err then
-    local msg = "  ✗ " .. err
+    local msg = "  ✗ " .. sl(err)
     table.insert(lines, msg)
     table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
   elseif not prs or #prs == 0 then
@@ -424,7 +426,7 @@ local function render_issues(lines, hl_specs, items, issues, err)
   table.insert(hl_specs, { hl = "GhSection", line = #lines - 1, col_s = 0, col_e = #header })
 
   if err then
-    local msg = "  ✗ " .. err
+    local msg = "  ✗ " .. sl(err)
     table.insert(lines, msg)
     table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
   elseif not issues or #issues == 0 then
@@ -454,7 +456,7 @@ local function render_activity(lines, hl_specs, activity, err)
   table.insert(hl_specs, { hl = "GhSection", line = #lines - 1, col_s = 0, col_e = #header })
 
   if err then
-    local msg = "  ✗ " .. err
+    local msg = "  ✗ " .. sl(err)
     table.insert(lines, msg)
     table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
   elseif not activity or #activity == 0 then
@@ -467,7 +469,7 @@ local function render_activity(lines, hl_specs, activity, err)
       local icon = EVENT_ICONS[ev.type] or "·"
       local age  = age_string(ev.created_at)
       local line = string.format("   %s  %-30s  %-35s  %s",
-        icon, ev.summary:sub(1, 30), (ev.repo or ""):sub(1, 35), age)
+        icon, sl(ev.summary):sub(1, 30), sl(ev.repo or ""):sub(1, 35), age)
       table.insert(lines, line)
       local icon_hl = "GhStats"
       if ev.type == "PushEvent"        then icon_hl = "GhPush"
@@ -488,7 +490,7 @@ local function render_repos(lines, hl_specs, items, repos, err)
   table.insert(hl_specs, { hl = "GhSection", line = #lines - 1, col_s = 0, col_e = #header })
 
   if err then
-    local msg = "  ✗ " .. err
+    local msg = "  ✗ " .. sl(err)
     table.insert(lines, msg)
     table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
   elseif not repos or #repos == 0 then
@@ -498,10 +500,10 @@ local function render_repos(lines, hl_specs, items, repos, err)
   else
     for _, repo in ipairs(repos) do
       local lock  = repo.is_private and "🔒" or " ⊙"
-      local lang  = repo.language ~= "" and repo.language or "—"
+      local lang  = sl(repo.language) ~= "" and sl(repo.language) or "—"
       local age   = age_string(repo.updated_at)
       local line  = string.format("   %s  %-30s  %-10s  ★%-3d  %s",
-        lock, repo.name:sub(1, 30), lang:sub(1, 10), repo.stars, age)
+        lock, sl(repo.name):sub(1, 30), lang:sub(1, 10), repo.stars, age)
       table.insert(items, { line = #lines, url = repo.url })
       table.insert(lines, line)
       table.insert(hl_specs, { hl = "GhItem", line = #lines - 1, col_s = 0, col_e = 35 })

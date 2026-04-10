@@ -494,7 +494,7 @@ local function render_pr(data)
       local s = safe_str(check.status):upper()
       local icon = (s == "SUCCESS" or s == "COMPLETED") and "✓" or (s == "FAILURE" or s == "ERROR") and "✗" or "⠋"
       local hl = (icon == "✓") and "GhCiPass" or (icon == "✗") and "GhCiFail" or "GhCiPending"
-      local chunk = icon .. " " .. check.name .. "  "
+      local chunk = icon .. " " .. sl(check.name) .. "  "
       table.insert(ci_hls, { hl = hl, col_s = col, col_e = col + #icon })
       col = col + #chunk
       table.insert(parts, chunk)
