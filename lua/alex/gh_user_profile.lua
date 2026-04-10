@@ -1,23 +1,9 @@
 local M = {}
-
--- ── constants (duplicated from github_dashboard.lua — 2 callers, below abstraction threshold) ──
-
-local HEATMAP_WEEKS   = 26
-local TIER_CHARS      = { " ", "░", "▒", "▓", "█" }
-local TIER_THRESHOLDS = { 0, 1, 4, 10, 25 }
-local HEAT_HLS        = { "GhHeat0", "GhHeat1", "GhHeat2", "GhHeat3", "GhHeat4" }
+local heatmap = require("alex.gh_heatmap")
 
 local ns = vim.api.nvim_create_namespace("GhUserProfile")
 
 -- ── helpers ────────────────────────────────────────────────────────────────
-
-local function contribution_tier(count)
-  if count == 0 then return 1 end
-  for i = #TIER_THRESHOLDS, 2, -1 do
-    if count >= TIER_THRESHOLDS[i] then return i end
-  end
-  return 2
-end
 
 local function sl(s) return (s or ""):gsub("[\n\r]", " ") end
 
@@ -67,14 +53,14 @@ local function fetch_user_contributions(username, callback)
         if not cal then callback("no contribution data", nil) return end
         local weeks = {}
         local all_weeks = cal.weeks or {}
-        local start = math.max(1, #all_weeks - HEATMAP_WEEKS + 1)
+        local start = math.max(1, #all_weeks - heatmap.HEATMAP_WEEKS + 1)
         for i = start, #all_weeks do
           local days = {}
           for _, d in ipairs(all_weeks[i].contributionDays or {}) do
             table.insert(days, {
               date  = d.date,
               count = d.contributionCount,
-              tier  = contribution_tier(d.contributionCount),
+              tier  = heatmap.contribution_tier(d.contributionCount),
             })
           end
           table.insert(weeks, days)
@@ -114,57 +100,14 @@ local function render_content(lines, hl_specs, username, profile, contrib, profi
     end
   end
 
-  -- separator
-  local sep = "  " .. string.rep("─", 58)
-  table.insert(lines, sep)
-  table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
-
-  -- heatmap
+  -- heatmap (render_heatmap includes trailing "N contributions this year" + separator)
   if contrib_err then
     local msg = "  ✗ contributions unavailable"
     table.insert(lines, msg)
     table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
     return
   end
-  if not contrib or not contrib.weeks or #contrib.weeks == 0 then return end
-
-  local day_labels = { "Mo", "  ", "We", "  ", "Fr", "  ", "Su" }
-  local heatmap_lines = {}
-  local heatmap_hl    = {}
-
-  for day_idx = 1, 7 do
-    local row_chars    = { "  ", day_labels[day_idx], " " }
-    local col_positions = {}
-    for _, week in ipairs(contrib.weeks) do
-      local day = week[day_idx]
-      if day then
-        local tier = day.tier or 1
-        table.insert(col_positions, { col = #table.concat(row_chars), tier = tier })
-        table.insert(row_chars, TIER_CHARS[tier] .. " ")
-      else
-        table.insert(row_chars, "  ")
-      end
-    end
-    table.insert(heatmap_lines, table.concat(row_chars))
-    table.insert(heatmap_hl, col_positions)
-  end
-
-  local base_line = #lines
-  for i, row in ipairs(heatmap_lines) do
-    table.insert(lines, row)
-    for _, cell in ipairs(heatmap_hl[i] or {}) do
-      table.insert(hl_specs, {
-        hl    = HEAT_HLS[cell.tier],
-        line  = base_line + i - 1,
-        col_s = cell.col,
-        col_e = cell.col + 2,
-      })
-    end
-  end
-
-  local total_line = string.format("     %d contributions this year", contrib.total or 0)
-  table.insert(lines, total_line)
-  table.insert(hl_specs, { hl = "GhStats", line = #lines - 1, col_s = 0, col_e = #total_line })
+  heatmap.render_heatmap(lines, hl_specs, contrib)
 end
 
 -- ── popup ─────────────────────────────────────────────────────────────────

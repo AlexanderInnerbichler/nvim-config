@@ -1,11 +1,9 @@
 local M = {}
+local heatmap = require("alex.gh_heatmap")
 
 -- ── constants ──────────────────────────────────────────────────────────────
 
 local CACHE_TTL = 300  -- 5 minutes
-local HEATMAP_WEEKS = 52
-local TIER_CHARS = { " ", "░", "▒", "▓", "█", "󰵿"}
-local TIER_THRESHOLDS = { 0, 1, 4, 10, 20, 35 }
 
 local EVENT_ICONS = {
   PushEvent         = "↑",
@@ -73,14 +71,6 @@ local function age_string(iso8601)
   end
 end
 
-local function contribution_tier(count)
-  if count == 0 then return 1 end
-  for i = #TIER_THRESHOLDS, 2, -1 do
-    if count >= TIER_THRESHOLDS[i] then return i end
-  end
-  return 2
-end
-
 local function repo_from_url(url)
   if not url then return "?" end
   return url:match("github%.com/([^/]+/[^/]+)") or "?"
@@ -135,7 +125,6 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "GhHeat5",  { fg = "#00ffFF", bg = "NONE" })  
 end
 
-local HEAT_HLS = { "GhHeat0", "GhHeat1", "GhHeat2", "GhHeat3", "GhHeat4", "GhHeat5" }
 
 -- ── async gh runner ────────────────────────────────────────────────────────
 
@@ -254,14 +243,14 @@ local function fetch_contributions(callback)
         if not cal then callback("no contribution data", nil) return end
         local weeks = {}
         local all_weeks = cal.weeks or {}
-        local start = math.max(1, #all_weeks - HEATMAP_WEEKS + 1)
+        local start = math.max(1, #all_weeks - heatmap.HEATMAP_WEEKS + 1)
         for i = start, #all_weeks do
           local days = {}
           for _, d in ipairs(all_weeks[i].contributionDays or {}) do
             table.insert(days, {
               date  = d.date,
               count = d.contributionCount,
-              tier  = contribution_tier(d.contributionCount),
+              tier  = heatmap.contribution_tier(d.contributionCount),
             })
           end
           table.insert(weeks, days)
@@ -465,53 +454,6 @@ local function render_profile(lines, hl_specs, profile, total_contrib, win_width
     end
   end
   table.insert(lines, separator(win_width))
-  table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
-end
-
-local function render_heatmap(lines, hl_specs, contrib)
-  if not contrib then return end
-  local weeks = contrib.weeks
-  if not weeks or #weeks == 0 then return end
-  -- 7 rows (Mon–Sun), each cell = one week column
-  local day_labels = { "Mo", "  ", "We", "  ", "Fr", "  ", "Su" }
-  local heatmap_lines = {}
-  local heatmap_hl    = {}  -- list of {row_idx, col_byte, tier}
-
-  for day_idx = 1, 7 do
-    local row_chars = { "  ", day_labels[day_idx], " " }
-    local col_positions = {}
-    for w_idx, week in ipairs(weeks) do
-      local day = week[day_idx]
-      if day then
-        local tier = day.tier or 1
-        local char = TIER_CHARS[tier]
-        table.insert(col_positions, { col = #table.concat(row_chars), tier = tier })
-	table.insert(row_chars, char)
-      else
-        table.insert(row_chars, "  ")
-      end
-    end
-    table.insert(heatmap_lines, table.concat(row_chars))
-    table.insert(heatmap_hl, col_positions)
-  end
-
-  local base_line = #lines
-  for i, row in ipairs(heatmap_lines) do
-    table.insert(lines, row)
-    for _, cell in ipairs(heatmap_hl[i] or {}) do
-      table.insert(hl_specs, {
-        hl    = HEAT_HLS[cell.tier],
-        line  = base_line + i - 1,
-        col_s = cell.col,
-        col_e = cell.col + 2,
-      })
-    end
-  end
-
-  local total_line = string.format("     %d contributions this year", contrib.total or 0)
-  table.insert(lines, total_line)
-  table.insert(hl_specs, { hl = "GhStats", line = #lines - 1, col_s = 0, col_e = #total_line })
-  table.insert(lines, separator())
   table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
 end
 
@@ -790,7 +732,7 @@ local function apply_render()
   table.insert(lines, "")  -- top padding
 
   render_profile(lines, hl_specs, data.profile, data.contributions and data.contributions.total, win_width)
-  render_heatmap(lines, hl_specs, data.contributions)
+  heatmap.render_heatmap(lines, hl_specs, data.contributions)
   render_prs(lines, hl_specs, items, data.prs, data.prs_err)
   render_issues(lines, hl_specs, items, data.issues, data.issues_err)
   render_activity(lines, hl_specs, data.activity, data.activity_err)
