@@ -346,7 +346,7 @@ local function fetch_team_activity(callback)
     { "gh", "api", "/user/orgs", "--paginate" },
     function(err, orgs)
       if err then callback(err, nil) return end
-      if not orgs or #orgs == 0 then callback(nil, {}) return end
+      if not orgs or #orgs == 0 then callback(nil, nil) return end
       local pending    = #orgs
       local all_events = {}
       local last_err
@@ -627,7 +627,7 @@ local function render_org_repos(lines, hl_specs, items, org_repos, err)
 end
 
 local function render_team_activity(lines, hl_specs, items, team_events, err)
-  if not err and (not team_events or #team_events == 0) then return end
+  if not err and team_events == nil then return end
 
   local header = "  Team Activity"
   table.insert(lines, header)
@@ -637,6 +637,10 @@ local function render_team_activity(lines, hl_specs, items, team_events, err)
     local msg = "  ✗ " .. sl(err)
     table.insert(lines, msg)
     table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
+  elseif #team_events == 0 then
+    local msg = "   No recent team activity"
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhEmpty", line = #lines - 1, col_s = 0, col_e = #msg })
   else
     for _, ev in ipairs(team_events) do
       local actor = sl(ev.actor or "?"):sub(1, 18)
