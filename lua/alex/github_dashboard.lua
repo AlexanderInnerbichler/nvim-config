@@ -504,7 +504,7 @@ local function render_repos(lines, hl_specs, items, repos, err)
       local age   = age_string(repo.updated_at)
       local line  = string.format("   %s  %-30s  %-10s  ★%-3d  %s",
         lock, sl(repo.name):sub(1, 30), lang:sub(1, 10), repo.stars, age)
-      table.insert(items, { line = #lines, url = repo.url })
+      table.insert(items, { line = #lines, url = repo.url, full_name = repo.full_name })
       table.insert(lines, line)
       table.insert(hl_specs, { hl = "GhItem", line = #lines - 1, col_s = 0, col_e = 35 })
       table.insert(hl_specs, { hl = "GhMeta", line = #lines - 1, col_s = 45, col_e = -1 })
@@ -668,10 +668,22 @@ local function open_win()
     vim.keymap.set("n", lhs, fn, { buffer = state.buf, nowait = true, silent = true })
   end
 
+  local function toggle_watch_at_cursor()
+    if not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
+    local cur_line = vim.api.nvim_win_get_cursor(state.win)[1] - 1  -- 0-indexed
+    for _, item in ipairs(state.items) do
+      if item.line == cur_line and item.full_name then
+        require("alex.gh_watchlist").toggle_repo(item.full_name)
+        return
+      end
+    end
+  end
+
   buf_map("q",     close_win)
   buf_map("<Esc>", close_win)
   buf_map("<CR>",  open_url_at_cursor)
   buf_map("o",     open_url_at_cursor)
+  buf_map("w",     toggle_watch_at_cursor)
   buf_map("r", function()
     vim.uv.fs_unlink(cache_path, function() end)
     state.data = state.data or {}
