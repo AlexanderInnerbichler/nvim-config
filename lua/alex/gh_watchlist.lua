@@ -421,6 +421,24 @@ M.open_latest = function()
   open_event(last._repo, last._ev)
 end
 
+-- ── public API — toggle_repo ─────────────────────────────────────────────
+
+M.toggle_repo = function(full_name)
+  local owner, repo = full_name:match("^([^/]+)/([^/]+)$")
+  if not owner or not repo then return end
+  for i, e in ipairs(state.repos) do
+    if e.owner == owner and e.repo == repo then
+      table.remove(state.repos, i)
+      save_watchlist()
+      vim.notify("Removed " .. full_name .. " from watchlist", vim.log.levels.INFO)
+      return
+    end
+  end
+  table.insert(state.repos, { owner = owner, repo = repo, last_seen_id = "" })
+  save_watchlist()
+  vim.notify("Added " .. full_name .. " to watchlist", vim.log.levels.INFO)
+end
+
 -- ── public API ────────────────────────────────────────────────────────────
 
 M.toggle = function()
