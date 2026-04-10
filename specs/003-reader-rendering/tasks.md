@@ -31,10 +31,10 @@ No shared infrastructure needed — US1, US2, US3 all touch different functions 
 
 ### Implementation
 
-- [ ] T002 [US1] Remove `"  "` prefix from `render_body_lines` — change `table.insert(lines, "  " .. raw_line)` to `table.insert(lines, raw_line)` in `lua/alex/gh_reader.lua`
-- [ ] T003 [US1] Convert issue title to markdown H1 — change `"  #" .. data.number .. "  " .. sl(data.title)` to `"# #" .. data.number .. "  " .. sl(data.title)` in `render_issue` in `lua/alex/gh_reader.lua`
-- [ ] T004 [US1] Convert PR title to markdown H1 — same change in `render_pr` in `lua/alex/gh_reader.lua`; remove the `GhReaderTitle` highlight for the title line from both functions
-- [ ] T005 [US1] Force re-render after `write_buf` — after `vim.bo[state.buf].modifiable = false` in `write_buf`, add `vim.schedule(function() vim.cmd("redraw") end)` in `lua/alex/gh_reader.lua`
+- [X] T002 [US1] Remove `"  "` prefix from `render_body_lines` — change `table.insert(lines, "  " .. raw_line)` to `table.insert(lines, raw_line)` in `lua/alex/gh_reader.lua`
+- [X] T003 [US1] Convert issue title to markdown H1 — change `"  #" .. data.number .. "  " .. sl(data.title)` to `"# #" .. data.number .. "  " .. sl(data.title)` in `render_issue` in `lua/alex/gh_reader.lua`
+- [X] T004 [US1] Convert PR title to markdown H1 — same change in `render_pr` in `lua/alex/gh_reader.lua`; remove the `GhReaderTitle` highlight for the title line from both functions
+- [X] T005 [US1] Force re-render after `write_buf` — after `vim.bo[state.buf].modifiable = false` in `write_buf`, add `vim.schedule(function() vim.cmd("redraw") end)` in `lua/alex/gh_reader.lua`
 
 **Checkpoint**: Open a real issue — heading renders with background, code block gets styled, bold text is bold. Zero raw syntax visible.
 
@@ -48,8 +48,8 @@ No shared infrastructure needed — US1, US2, US3 all touch different functions 
 
 ### Implementation
 
-- [ ] T006 [US2] Replace custom `separator()` call between comments with a `---` markdown thematic break in `render_comments_section` in `lua/alex/gh_reader.lua`; also replace the section header separator before `💬 Comments` with `---`
-- [ ] T007 [US2] Change comment author line from plain `"  @" .. c.author .. "  ·  " .. age` to markdown H4 `"#### @" .. sl(c.author) .. "  ·  " .. age_string(c.created_at)` in `render_comments_section` in `lua/alex/gh_reader.lua`; remove the manual `GhReaderMeta` highlight for this line
+- [X] T006 [US2] Replace custom `separator()` call between comments with a `---` markdown thematic break in `render_comments_section` in `lua/alex/gh_reader.lua`; also replace the section header separator before `💬 Comments` with `---`
+- [X] T007 [US2] Change comment author line from plain `"  @" .. c.author .. "  ·  " .. age` to markdown H4 `"#### @" .. sl(c.author) .. "  ·  " .. age_string(c.created_at)` in `render_comments_section` in `lua/alex/gh_reader.lua`; remove the manual `GhReaderMeta` highlight for this line
 
 **Checkpoint**: Comment thread renders with styled `---` dividers and H4 author headings (soft background). Each comment is a visually distinct card.
 
@@ -61,8 +61,8 @@ No shared infrastructure needed — US1, US2, US3 all touch different functions 
 
 ### Implementation
 
-- [ ] T008 [US3] Remove `GhReaderTitle` highlight group from `setup_highlights` in `lua/alex/gh_reader.lua` (replaced by render-markdown H1 styling)
-- [ ] T009 [US3] Remove `GhReaderSection` highlight application for the comments section header line (it now renders as a markdown heading) in `lua/alex/gh_reader.lua`
+- [X] T008 [US3] Remove `GhReaderTitle` highlight group from `setup_highlights` in `lua/alex/gh_reader.lua` (replaced by render-markdown H1 styling)
+- [X] T009 [US3] Remove `GhReaderSection` highlight application for the comments section header line (it now renders as a markdown heading) in `lua/alex/gh_reader.lua`
 - [ ] T010 Smoke test: open a PR with all content types (heading, code block, list, bold, 3+ comments) — verify SC-004 (zero raw syntax) and SC-001 (metadata readable in 3 seconds)
 
 ---
