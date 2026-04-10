@@ -384,11 +384,9 @@ local function render_body_lines(lines, hl_specs, body)
 end
 
 local function render_comments_section(lines, hl_specs, comments)
-  local header = "  💬 Comments (" .. #comments .. ")"
-  table.insert(lines, separator())
-  table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
-  table.insert(lines, header)
-  table.insert(hl_specs, { hl = "GhReaderSection", line = #lines - 1, col_s = 0, col_e = #header })
+  table.insert(lines, "")
+  table.insert(lines, "---")
+  table.insert(lines, "## 💬 Comments (" .. #comments .. ")")
   if #comments == 0 then
     local msg = "   No comments yet"
     table.insert(lines, msg)
@@ -397,9 +395,9 @@ local function render_comments_section(lines, hl_specs, comments)
   end
   for _, c in ipairs(comments) do
     table.insert(lines, "")
-    local meta = "  @" .. c.author .. "  ·  " .. age_string(c.created_at)
-    table.insert(lines, meta)
-    table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 0, col_e = #meta })
+    table.insert(lines, "---")
+    table.insert(lines, "#### @" .. sl(c.author) .. "  ·  " .. age_string(c.created_at))
+    table.insert(lines, "")
     render_body_lines(lines, hl_specs, c.body)
   end
 end
@@ -411,18 +409,18 @@ local function render_reviews_section(lines, hl_specs, reviews)
     if r.body ~= "" then table.insert(with_body, r) end
   end
   if #with_body == 0 then return end
-  local header = "  🔍 Reviews (" .. #with_body .. ")"
-  table.insert(lines, separator())
-  table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
-  table.insert(lines, header)
-  table.insert(hl_specs, { hl = "GhReaderSection", line = #lines - 1, col_s = 0, col_e = #header })
+  table.insert(lines, "")
+  table.insert(lines, "---")
+  table.insert(lines, "## 🔍 Reviews (" .. #with_body .. ")")
   for _, r in ipairs(with_body) do
     table.insert(lines, "")
+    table.insert(lines, "---")
     local state_icon = r.state == "APPROVED" and "✓" or (r.state == "CHANGES_REQUESTED" and "✗" or "·")
-    local meta = "  " .. state_icon .. " @" .. r.author .. "  ·  " .. r.state:lower():gsub("_", " ") .. "  ·  " .. age_string(r.submitted_at)
-    table.insert(lines, meta)
     local hl = r.state == "APPROVED" and "GhReviewApproved" or (r.state == "CHANGES_REQUESTED" and "GhReviewChanges" or "GhReviewComment")
+    local author_line = "#### " .. state_icon .. " @" .. sl(r.author) .. "  ·  " .. r.state:lower():gsub("_", " ") .. "  ·  " .. age_string(r.submitted_at)
+    table.insert(lines, author_line)
     table.insert(hl_specs, { hl = hl, line = #lines - 1, col_s = 0, col_e = -1 })
+    table.insert(lines, "")
     render_body_lines(lines, hl_specs, r.body)
   end
 end
