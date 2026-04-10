@@ -65,7 +65,8 @@ M.toggle = function()
 end
 
 M.setup = function()
-	vim.uv.fs_watch(plans_dir, {}, function(err, fname, _events)
+	local watcher = vim.uv.new_fs_event()
+	watcher:start(plans_dir, {}, function(err, fname, _events)
 		if err or not fname or not fname:match("%.md$") then return end
 		vim.schedule(function()
 			local path = plans_dir .. "/" .. fname
