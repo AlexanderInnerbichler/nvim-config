@@ -293,6 +293,23 @@ end
 
 -- ── fetch functions ────────────────────────────────────────────────────────
 
+local function fetch_readme(item, callback)
+  vim.system(
+    { "gh", "api", "repos/" .. item.full_name .. "/readme",
+      "-H", "Accept: application/vnd.github.raw" },
+    { text = true },
+    function(result)
+      vim.schedule(function()
+        if result.code ~= 0 then
+          callback("No README found", nil)
+          return
+        end
+        callback(nil, result.stdout)
+      end)
+    end
+  )
+end
+
 local function fetch_issue(item, callback)
   run_gh(
     { "gh", "issue", "view", tostring(item.number), "-R", item.repo,
@@ -636,6 +653,26 @@ local function render_pr(data)
   write_buf(lines, hl_specs)
 end
 
+local function render_readme(data)
+  local lines    = {}
+  local hl_specs = {}
+
+  local crumb_prefix = "  GitHub Dashboard  ›  "
+  local crumb        = crumb_prefix .. data.full_name .. "  ›  README"
+  table.insert(lines, crumb)
+  table.insert(hl_specs, { hl = "GhReaderBreadcrumb", line = 0, col_s = 0,             col_e = #crumb_prefix })
+  table.insert(hl_specs, { hl = "GhReaderTitle",      line = 0, col_s = #crumb_prefix, col_e = -1 })
+  table.insert(lines, "")
+  table.insert(lines, separator())
+  table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+  table.insert(lines, "")
+
+  process_body(data.body, lines, hl_specs)
+
+  open_popup(data.full_name .. "  README", "q back")
+  write_buf(lines, hl_specs)
+end
+
 -- ── input buffer ───────────────────────────────────────────────────────────
 
 function M.open_input(hint, on_submit)
@@ -767,14 +804,15 @@ end
 function M.open(item)
   state.item = item
   state.data = nil
-  open_popup("#" .. tostring(item.number) .. " — loading…", "q back")
+  local label = item.number and ("#" .. tostring(item.number)) or (item.full_name or item.repo or "…")
+  open_popup(label .. " — loading…", "q back")
 
   local crumb_prefix = "  GitHub Dashboard  ›  "
   vim.bo[state.buf].modifiable = true
   vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, {
-    crumb_prefix .. "#" .. tostring(item.number),
+    crumb_prefix .. label,
     "",
-    "  ⠋ loading #" .. tostring(item.number) .. " from " .. item.repo .. "…",
+    "  ⠋ loading " .. label .. "…",
   })
   vim.bo[state.buf].modifiable = false
 
@@ -799,6 +837,16 @@ function M.open(item)
       end
       state.data = data
       render_pr(data)
+    end)
+  elseif item.kind == "repo" then
+    fetch_readme(item, function(err, body)
+      if err then
+        vim.bo[state.buf].modifiable = true
+        vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, { "", "  ✗ " .. sl(err) })
+        vim.bo[state.buf].modifiable = false
+        return
+      end
+      render_readme({ full_name = item.full_name, body = body })
     end)
   end
 end
