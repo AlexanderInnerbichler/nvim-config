@@ -60,7 +60,7 @@
 
 - [X] T007 Manual smoke test: open dashboard with no org memberships → "Organization Repositories" section absent (not shown), no errors
 - [X] T008 Manual smoke test: simulate network error on org fetch (disconnect, then open dashboard) → section shows error message, rest of dashboard loads normally
-- [ ] T009 Commit: `feat: org repo browser — Organization Repositories section in dashboard` and push to `009-org-repo-browser`
+- [X] T009 Commit: `feat: org repo browser — Organization Repositories section in dashboard` and push to `009-org-repo-browser`
 
 ---
 
