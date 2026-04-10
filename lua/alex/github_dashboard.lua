@@ -1,12 +1,9 @@
 local M = {}
+local heatmap = require("alex.gh_heatmap")
 
 -- ── constants ──────────────────────────────────────────────────────────────
 
 local CACHE_TTL = 300  -- 5 minutes
-local HEATMAP_WEEKS = 26
-
-local TIER_CHARS = { " ", "░", "▒", "▓", "█" }
-local TIER_THRESHOLDS = { 0, 1, 4, 10, 25 }
 
 local EVENT_ICONS = {
   PushEvent         = "↑",
@@ -74,14 +71,6 @@ local function age_string(iso8601)
   end
 end
 
-local function contribution_tier(count)
-  if count == 0 then return 1 end
-  for i = #TIER_THRESHOLDS, 2, -1 do
-    if count >= TIER_THRESHOLDS[i] then return i end
-  end
-  return 2
-end
-
 local function repo_from_url(url)
   if not url then return "?" end
   return url:match("github%.com/([^/]+/[^/]+)") or "?"
@@ -133,9 +122,9 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "GhHeat2",  { fg = "#0a7a5c", bg = "NONE" })  -- emerald
   vim.api.nvim_set_hl(0, "GhHeat3",  { fg = "#10c87e", bg = "NONE" })  -- bright teal-green
   vim.api.nvim_set_hl(0, "GhHeat4",  { fg = "#00ff99", bg = "NONE" })  -- neon mint
+  vim.api.nvim_set_hl(0, "GhHeat5",  { fg = "#00ffFF", bg = "NONE" })  
 end
 
-local HEAT_HLS = { "GhHeat0", "GhHeat1", "GhHeat2", "GhHeat3", "GhHeat4" }
 
 -- ── async gh runner ────────────────────────────────────────────────────────
 
@@ -254,14 +243,14 @@ local function fetch_contributions(callback)
         if not cal then callback("no contribution data", nil) return end
         local weeks = {}
         local all_weeks = cal.weeks or {}
-        local start = math.max(1, #all_weeks - HEATMAP_WEEKS + 1)
+        local start = math.max(1, #all_weeks - heatmap.HEATMAP_WEEKS + 1)
         for i = start, #all_weeks do
           local days = {}
           for _, d in ipairs(all_weeks[i].contributionDays or {}) do
             table.insert(days, {
               date  = d.date,
               count = d.contributionCount,
-              tier  = contribution_tier(d.contributionCount),
+              tier  = heatmap.contribution_tier(d.contributionCount),
             })
           end
           table.insert(weeks, days)
@@ -341,6 +330,87 @@ local function fetch_org_repos(callback)
   )
 end
 
+local function fetch_team_activity(callback)
+  run_gh(
+    { "gh", "api", "/user/orgs", "--paginate" },
+    function(err, orgs)
+      if err then callback(err, nil) return end
+      if not orgs or #orgs == 0 then callback(nil, nil) return end
+      local pending    = #orgs
+      local all_events = {}
+      local last_err
+      for _, org in ipairs(orgs) do
+        run_gh(
+          { "gh", "api", "/orgs/" .. org.login .. "/events",
+            "--jq", "[.[] | {type, actor: .actor.login, repo: .repo.name, created_at, pr_number: .payload.pull_request.number, issue_number: .payload.issue.number}]" },
+          function(ferr, events)
+            if ferr then
+              last_err = ferr
+            else
+              for _, ev in ipairs(events or {}) do
+                table.insert(all_events, ev)
+              end
+            end
+            pending = pending - 1
+            if pending == 0 then
+              table.sort(all_events, function(a, b)
+                return (a.created_at or "") > (b.created_at or "")
+              end)
+              local top = {}
+              for i = 1, math.min(10, #all_events) do
+                top[i] = all_events[i]
+              end
+              if #top == 0 and last_err then
+                callback(last_err, nil)
+              else
+                callback(nil, top)
+              end
+            end
+          end
+        )
+      end
+    end
+  )
+end
+
+local function fetch_watched_users_activity(callback)
+  local users = require("alex.gh_user_watchlist").get_users()
+  if not users or #users == 0 then callback(nil, nil) return end
+  local pending    = #users
+  local all_events = {}
+  local last_err
+  for _, username in ipairs(users) do
+    run_gh(
+      { "gh", "api", "/users/" .. username .. "/events",
+        "--jq", "[.[] | {type, actor: .actor.login, repo: .repo.name, created_at, pr_number: .payload.pull_request.number, issue_number: .payload.issue.number}] | .[0:20]" },
+      function(ferr, events)
+        if ferr then
+          last_err = ferr
+        else
+          for _, ev in ipairs(events or {}) do
+            table.insert(all_events, ev)
+          end
+        end
+        pending = pending - 1
+        if pending == 0 then
+          table.sort(all_events, function(a, b)
+            return (a.created_at or "") > (b.created_at or "")
+          end)
+          local top = {}
+          for i = 1, math.min(10, #all_events) do
+            top[i] = all_events[i]
+          end
+          if #top == 0 and last_err then
+            callback(last_err, nil)
+          else
+            callback(nil, top)
+          end
+        end
+      end
+    )
+  end
+end
+
 -- ── render functions ───────────────────────────────────────────────────────
 
 local function separator(width)
@@ -384,53 +454,6 @@ local function render_profile(lines, hl_specs, profile, total_contrib, win_width
     end
   end
   table.insert(lines, separator(win_width))
-  table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
-end
-
-local function render_heatmap(lines, hl_specs, contrib)
-  if not contrib then return end
-  local weeks = contrib.weeks
-  if not weeks or #weeks == 0 then return end
-  -- 7 rows (Mon–Sun), each cell = one week column
-  local day_labels = { "Mo", "  ", "We", "  ", "Fr", "  ", "Su" }
-  local heatmap_lines = {}
-  local heatmap_hl    = {}  -- list of {row_idx, col_byte, tier}
-
-  for day_idx = 1, 7 do
-    local row_chars = { "  ", day_labels[day_idx], " " }
-    local col_positions = {}
-    for w_idx, week in ipairs(weeks) do
-      local day = week[day_idx]
-      if day then
-        local tier = day.tier or 1
-        local char = TIER_CHARS[tier]
-        table.insert(col_positions, { col = #table.concat(row_chars), tier = tier })
-        table.insert(row_chars, char .. " ")
-      else
-        table.insert(row_chars, "  ")
-      end
-    end
-    table.insert(heatmap_lines, table.concat(row_chars))
-    table.insert(heatmap_hl, col_positions)
-  end
-
-  local base_line = #lines
-  for i, row in ipairs(heatmap_lines) do
-    table.insert(lines, row)
-    for _, cell in ipairs(heatmap_hl[i] or {}) do
-      table.insert(hl_specs, {
-        hl    = HEAT_HLS[cell.tier],
-        line  = base_line + i - 1,
-        col_s = cell.col,
-        col_e = cell.col + 2,
-      })
-    end
-  end
-
-  local total_line = string.format("     %d contributions this year", contrib.total or 0)
-  table.insert(lines, total_line)
-  table.insert(hl_specs, { hl = "GhStats", line = #lines - 1, col_s = 0, col_e = #total_line })
-  table.insert(lines, separator())
   table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
 end
 
@@ -583,6 +606,117 @@ local function render_org_repos(lines, hl_specs, items, org_repos, err)
   end
 end
 
+local function render_team_activity(lines, hl_specs, items, team_events, err)
+  if not err and team_events == nil then return end
+
+  local header = "  Team Activity"
+  table.insert(lines, header)
+  table.insert(hl_specs, { hl = "GhSection", line = #lines - 1, col_s = 0, col_e = #header })
+
+  if err then
+    local msg = "  ✗ " .. sl(err)
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
+  elseif #team_events == 0 then
+    local msg = "   No recent team activity"
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhEmpty", line = #lines - 1, col_s = 0, col_e = #msg })
+  else
+    for _, ev in ipairs(team_events) do
+      local actor = sl(ev.actor or "?"):sub(1, 18)
+      local icon  = EVENT_ICONS[ev.type] or "·"
+      local repo  = sl(ev.repo or "?"):sub(1, 30)
+      local age   = age_string(ev.created_at)
+      local line  = string.format("   %-18s  %s  %-30s  %s", actor, icon, repo, age)
+      if ev.type == "PullRequestEvent" and ev.pr_number and ev.pr_number ~= vim.NIL then
+        table.insert(items, { line = #lines, kind = "pr", number = ev.pr_number, repo = ev.repo })
+      elseif ev.type == "IssuesEvent" and ev.issue_number and ev.issue_number ~= vim.NIL then
+        table.insert(items, { line = #lines, kind = "issue", number = ev.issue_number, repo = ev.repo })
+      else
+        table.insert(items, { line = #lines, kind = "push", url = "https://github.com/" .. (ev.repo or "") })
+      end
+      table.insert(lines, line)
+      local icon_hl = "GhStats"
+      if ev.type == "PushEvent"        then icon_hl = "GhPush"
+      elseif ev.type == "PullRequestEvent" then icon_hl = "GhPR"
+      elseif ev.type == "IssuesEvent" or ev.type == "IssueCommentEvent" then icon_hl = "GhIssue"
+      end
+      local icon_col = 3 + 18 + 2  -- after "   " + actor + "  "
+      table.insert(hl_specs, { hl = icon_hl,   line = #lines - 1, col_s = icon_col, col_e = icon_col + #icon })
+      table.insert(hl_specs, { hl = "GhStats", line = #lines - 1, col_s = 3,        col_e = 3 + 18 })
+      table.insert(hl_specs, { hl = "GhMeta",  line = #lines - 1, col_s = icon_col + #icon + 2 + 30 + 2, col_e = -1 })
+    end
+  end
+  table.insert(lines, separator())
+  table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
+end
+
+local function render_watched_users(lines, hl_specs, items, events, err)
+  if not err and events == nil then return end
+
+  local header = "  Watched Users"
+  table.insert(lines, header)
+  table.insert(hl_specs, { hl = "GhSection", line = #lines - 1, col_s = 0, col_e = #header })
+
+  if err then
+    local msg = "  ✗ " .. sl(err)
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
+  elseif #events == 0 then
+    local msg = "   No recent activity from watched users"
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhEmpty", line = #lines - 1, col_s = 0, col_e = #msg })
+  else
+    -- group events by actor, preserving first-appearance order
+    local actor_order  = {}
+    local actor_events = {}
+    for _, ev in ipairs(events) do
+      local actor = sl(ev.actor or "?")
+      if not actor_events[actor] then
+        table.insert(actor_order, actor)
+        actor_events[actor] = {}
+      end
+      table.insert(actor_events[actor], ev)
+    end
+
+    for _, actor in ipairs(actor_order) do
+      -- actor header row — <CR> opens profile popup
+      local actor_line = "   @" .. actor
+      table.insert(items, { line = #lines, kind = "user", username = actor })
+      table.insert(lines, actor_line)
+      table.insert(hl_specs, { hl = "GhSection",  line = #lines - 1, col_s = 0, col_e = 4 })
+      table.insert(hl_specs, { hl = "GhUsername", line = #lines - 1, col_s = 4, col_e = #actor_line })
+
+      -- events for this actor (indented, no actor column)
+      for _, ev in ipairs(actor_events[actor]) do
+        local icon = EVENT_ICONS[ev.type] or "·"
+        local repo = sl(ev.repo or "?"):sub(1, 32)
+        local age  = age_string(ev.created_at)
+        local line = string.format("      %s  %-32s  %s", icon, repo, age)
+        if ev.type == "PullRequestEvent" and ev.pr_number and ev.pr_number ~= vim.NIL then
+          table.insert(items, { line = #lines, kind = "pr", number = ev.pr_number, repo = ev.repo })
+        elseif ev.type == "IssuesEvent" and ev.issue_number and ev.issue_number ~= vim.NIL then
+          table.insert(items, { line = #lines, kind = "issue", number = ev.issue_number, repo = ev.repo })
+        else
+          table.insert(items, { line = #lines, kind = "push", url = "https://github.com/" .. (ev.repo or "") })
+        end
+        table.insert(lines, line)
+        local icon_hl = "GhStats"
+        if ev.type == "PushEvent"        then icon_hl = "GhPush"
+        elseif ev.type == "PullRequestEvent" then icon_hl = "GhPR"
+        elseif ev.type == "IssuesEvent" or ev.type == "IssueCommentEvent" then icon_hl = "GhIssue"
+        end
+        local icon_col = 6  -- 6 spaces indent
+        local meta_col = icon_col + #icon + 2 + 32 + 2
+        table.insert(hl_specs, { hl = icon_hl,   line = #lines - 1, col_s = icon_col, col_e = icon_col + #icon })
+        table.insert(hl_specs, { hl = "GhMeta",  line = #lines - 1, col_s = meta_col, col_e = -1 })
+      end
+    end
+  end
+  table.insert(lines, separator())
+  table.insert(hl_specs, { hl = "GhSeparator", line = #lines - 1, col_s = 0, col_e = -1 })
+end
+
 -- ── main render ────────────────────────────────────────────────────────────
 
 local function apply_render()
@@ -598,12 +732,14 @@ local function apply_render()
   table.insert(lines, "")  -- top padding
 
   render_profile(lines, hl_specs, data.profile, data.contributions and data.contributions.total, win_width)
-  render_heatmap(lines, hl_specs, data.contributions)
+  heatmap.render_heatmap(lines, hl_specs, data.contributions)
   render_prs(lines, hl_specs, items, data.prs, data.prs_err)
   render_issues(lines, hl_specs, items, data.issues, data.issues_err)
   render_activity(lines, hl_specs, data.activity, data.activity_err)
   render_repos(lines, hl_specs, items, data.repos, data.repos_err)
   render_org_repos(lines, hl_specs, items, data.org_repos, data.org_repos_err)
+  render_team_activity(lines, hl_specs, items, data.team_events, data.team_events_err)
+  render_watched_users(lines, hl_specs, items, data.watched_events, data.watched_events_err)
 
   state.items = items
 
@@ -639,7 +775,7 @@ local function fetch_and_render()
   local login = state.data and state.data.profile and state.data.profile.login
 
   local function start_secondary_fetches()
-    pending = pending + 4
+    pending = pending + 6
     fetch_prs(function(err, prs)
       if err then state.data.prs_err = err else state.data.prs = prs end
       done(err ~= nil)
@@ -654,6 +790,14 @@ local function fetch_and_render()
     end)
     fetch_org_repos(function(err, org_repos)
       if err then state.data.org_repos_err = err else state.data.org_repos = org_repos end
+      done(err ~= nil)
+    end)
+    fetch_team_activity(function(err, events)
+      if err then state.data.team_events_err = err else state.data.team_events = events end
+      done(err ~= nil)
+    end)
+    fetch_watched_users_activity(function(err, events)
+      if err then state.data.watched_events_err = err else state.data.watched_events = events end
       done(err ~= nil)
     end)
     if login then
@@ -692,6 +836,8 @@ local function open_url_at_cursor()
     if item.line == cur_line then
       if item.kind == "issue" or item.kind == "pr" or item.kind == "repo" then
         require("alex.gh_reader").open(item)
+      elseif item.kind == "user" then
+        require("alex.gh_user_profile").open(item.username)
       else
         vim.system({ "xdg-open", item.url })
       end
