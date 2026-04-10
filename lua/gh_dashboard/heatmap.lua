@@ -29,7 +29,7 @@ M.render_heatmap = function(lines, hl_specs, contrib, items, username)
   local weeks = contrib.weeks
   if not weeks or #weeks == 0 then return end
 
-  local day_labels    = { "Mo", "  ", "We", "  ", "Fr", "  ", "Su" }
+  local day_labels    = { "Su", "  ", "Tu", "  ", "Th", "  ", "Sa" }
   local heatmap_lines = {}
   local heatmap_hl    = {}
   local day_last_dates = {}
