@@ -55,6 +55,10 @@ vim.api.nvim_set_keymap("n", "<leader>o", ":nohlsearch<CR>", {})
 -- github dashboard
 vim.keymap.set("n", "<leader>gh", function() require("alex.github_dashboard").toggle() end, { desc = "Toggle GitHub Dashboard" })
 
+-- github watchlist
+vim.keymap.set("n", "<leader>gw", function() require("alex.gh_watchlist").toggle() end, { desc = "Toggle GitHub Watchlist" })
+vim.keymap.set("n", "<leader>gn", function() require("alex.gh_watchlist").open_latest() end, { desc = "Open latest GitHub notification" })
+
 -- avante
 -- alot of the avante stuf is already defined
 vim.api.nvim_set_keymap("n", "<leader>at", ":AvanteToggle<CR>", {})
