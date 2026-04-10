@@ -6,6 +6,7 @@ local WATCHLIST_PATH = vim.fn.expand("~/.config/nvim/gh-watchlist.json")
 local NOTIF_WIDTH    = 54
 local NOTIF_HEIGHT   = 3
 local MAX_NOTIFS     = 3
+local MAX_HISTORY    = 20
 local NOTIF_TTL_MS   = 5000
 local POLL_DELAY_MS  = 5000
 local POLL_REPEAT_MS = 60000
@@ -16,6 +17,7 @@ local state = {
   repos        = {},   -- list of { owner, repo, last_seen_id }
   poll_timer   = nil,
   notifs       = {},   -- list of { win, buf, timer, _repo, _ev }
+  history      = {},   -- list of { _repo, _ev } newest-first, max MAX_HISTORY
   manager_buf  = nil,
   manager_win  = nil,
 }
@@ -166,6 +168,10 @@ local function show_notification(repo, ev)
   end))
 
   table.insert(state.notifs, { win = win, buf = buf, timer = t, _repo = repo, _ev = ev })
+
+  -- keep a history so open_latest works after the popup auto-dismisses
+  table.insert(state.history, 1, { _repo = repo, _ev = ev })
+  if #state.history > MAX_HISTORY then table.remove(state.history) end
 end
 
 -- ── polling ────────────────────────────────────────────────────────────────
@@ -407,18 +413,86 @@ local function open_event(repo, ev)
   vim.system({ "xdg-open", "https://github.com/" .. repo })
 end
 
+local function open_history_popup()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].buftype    = "nofile"
+  vim.bo[buf].bufhidden  = "wipe"
+  vim.bo[buf].filetype   = "text"
+  vim.bo[buf].modifiable = false
+
+  local lines, hl_specs = {}, {}
+  table.insert(lines, "")
+  for _, entry in ipairs(state.history) do
+    local label = event_label(entry._ev)
+    local line  = "   " .. entry._repo .. "  ·  " .. label
+    table.insert(lines, line)
+    table.insert(hl_specs, { hl = "GhWatchRepo",  line = #lines - 1, col_s = 3, col_e = 3 + #entry._repo })
+    table.insert(hl_specs, { hl = "GhWatchMeta",  line = #lines - 1, col_s = 3 + #entry._repo, col_e = -1 })
+  end
+  table.insert(lines, "")
+  write_buf(buf, lines, hl_specs)
+
+  local ui     = vim.api.nvim_list_uis()[1] or { width = 180, height = 50 }
+  local width  = math.floor(ui.width  * 0.70)
+  local height = math.floor(ui.height * 0.50)
+  local row    = math.floor((ui.height - height) / 2)
+  local col    = math.floor((ui.width  - width)  / 2)
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative   = "editor",
+    width      = width,
+    height     = height,
+    row        = row,
+    col        = col,
+    style      = "minimal",
+    border     = "rounded",
+    title      = " Recent Notifications ",
+    title_pos  = "center",
+    footer     = " <CR> open  ·  q close ",
+    footer_pos = "center",
+  })
+  vim.wo[win].cursorline     = true
+  vim.wo[win].number         = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn     = "no"
+
+  local function bmap(lhs, fn)
+    vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, silent = true })
+  end
+
+  local function open_at_cursor()
+    local cur = vim.api.nvim_win_get_cursor(win)[1]
+    local idx = cur - 1  -- offset for leading blank line
+    if idx < 1 or idx > #state.history then return end
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, false)
+    end
+    open_event(state.history[idx]._repo, state.history[idx]._ev)
+  end
+
+  bmap("<CR>",  open_at_cursor)
+  bmap("q",     function() if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, false) end end)
+  bmap("<Esc>", function() if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, false) end end)
+end
+
 M.open_latest = function()
+  -- prefer a live popup: dismiss it and open directly
   local last = state.notifs[#state.notifs]
-  if not last then
+  if last then
+    if last.timer then last.timer:stop() last.timer:close() end
+    if last.win and vim.api.nvim_win_is_valid(last.win) then
+      pcall(vim.api.nvim_win_close, last.win, true)
+    end
+    table.remove(state.notifs)
+    open_event(last._repo, last._ev)
+    return
+  end
+  -- fall back to browseable history
+  if #state.history == 0 then
     vim.notify("No recent notifications", vim.log.levels.INFO)
     return
   end
-  if last.timer then last.timer:stop() last.timer:close() end
-  if last.win and vim.api.nvim_win_is_valid(last.win) then
-    pcall(vim.api.nvim_win_close, last.win, true)
-  end
-  table.remove(state.notifs)
-  open_event(last._repo, last._ev)
+  open_history_popup()
 end
 
 -- ── public API — toggle_repo ─────────────────────────────────────────────
