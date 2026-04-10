@@ -83,6 +83,7 @@ local function write_buf(lines, hl_specs)
   vim.bo[state.buf].modifiable = true
   vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
   vim.bo[state.buf].modifiable = false
+  vim.schedule(function() vim.cmd("redraw") end)
   vim.api.nvim_buf_clear_namespace(state.buf, ns, 0, -1)
   for _, spec in ipairs(hl_specs) do
     local col_e = spec.col_e == -1 and -1 or spec.col_e
@@ -378,7 +379,7 @@ local function render_body_lines(lines, hl_specs, body)
     return
   end
   for raw_line in (body .. "\n"):gmatch("([^\n]*)\n") do
-    table.insert(lines, "  " .. raw_line)
+    table.insert(lines, raw_line)
   end
 end
 
@@ -434,10 +435,9 @@ local function render_issue(data)
 
   table.insert(lines, "")
 
-  -- title line
-  local title_line = "  #" .. data.number .. "  " .. sl(data.title)
+  -- title line (H1 → render-markdown.nvim renders with full-width background)
+  local title_line = "# #" .. data.number .. "  " .. sl(data.title)
   table.insert(lines, title_line)
-  table.insert(hl_specs, { hl = "GhReaderTitle", line = #lines - 1, col_s = 0, col_e = -1 })
 
   -- meta line: state · author · labels · age
   local state_tag = " " .. data.state .. " "
@@ -465,11 +465,10 @@ local function render_pr(data)
 
   table.insert(lines, "")
 
-  -- title line
+  -- title line (H1 → render-markdown.nvim renders with full-width background)
   local draft_tag = data.is_draft and "  [draft]" or ""
-  local title_line = "  #" .. data.number .. "  " .. sl(data.title) .. draft_tag
+  local title_line = "# #" .. data.number .. "  " .. sl(data.title) .. draft_tag
   table.insert(lines, title_line)
-  table.insert(hl_specs, { hl = "GhReaderTitle", line = #lines - 1, col_s = 0, col_e = -1 })
 
   -- meta: state · author · age
   local state_tag = " " .. data.state .. " "
