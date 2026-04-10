@@ -417,6 +417,21 @@ local function fetch_pr(item, callback)
   )
 end
 
+local function fetch_review_comments(number, repo, callback)
+  vim.system(
+    { "gh", "api", "repos/" .. repo .. "/pulls/" .. tostring(number) .. "/comments",
+      "--jq", "[.[] | {login: .user.login, path: .path, line: (.line // .original_line), body: .body, hunk: .diff_hunk}]" },
+    { text = true },
+    function(result)
+      vim.schedule(function()
+        if result.code ~= 0 then callback({}) return end
+        local ok, data = pcall(vim.json.decode, result.stdout or "[]")
+        callback(ok and type(data) == "table" and data or {})
+      end)
+    end
+  )
+end
+
 -- ── render helpers ─────────────────────────────────────────────────────────
 
 local function state_hl(s)
@@ -528,6 +543,28 @@ local function render_review_comments_section(lines, hl_specs, review_comments)
     table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 0, col_e = -1 })
     table.insert(lines, "  " .. string.rep("╌", CODE_WIDTH))
     table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+    if rc.hunk and rc.hunk ~= "" then
+      local hunk_lines = {}
+      for hunk_line in rc.hunk:gmatch("[^\n]+") do
+        if not hunk_line:match("^@@") then
+          table.insert(hunk_lines, hunk_line)
+        end
+      end
+      local start = math.max(1, #hunk_lines - 2)
+      for i = start, #hunk_lines do
+        local hl = hunk_lines[i]
+        local display = "  " .. hl
+        table.insert(lines, display)
+        local ln = #lines - 1
+        if hl:sub(1, 1) == "+" then
+          table.insert(hl_specs, { hl = "GhDiffAdd", line = ln, col_s = 0, col_e = -1 })
+        elseif hl:sub(1, 1) == "-" then
+          table.insert(hl_specs, { hl = "GhDiffDel", line = ln, col_s = 0, col_e = -1 })
+        end
+      end
+      table.insert(lines, "  " .. string.rep("╌", CODE_WIDTH))
+      table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+    end
     process_body(rc.body, lines, hl_specs)
   end
 end
@@ -893,23 +930,6 @@ function M.open(item)
       render_readme({ full_name = item.full_name, body = body })
     end)
   end
-end
-
--- ── review comments fetch ─────────────────────────────────────────────────
-
-local function fetch_review_comments(number, repo, callback)
-  vim.system(
-    { "gh", "api", "repos/" .. repo .. "/pulls/" .. tostring(number) .. "/comments",
-      "--jq", "[.[] | {login: .user.login, path: .path, line: (.line // .original_line), body: .body}]" },
-    { text = true },
-    function(result)
-      vim.schedule(function()
-        if result.code ~= 0 then callback({}) return end
-        local ok, data = pcall(vim.json.decode, result.stdout or "[]")
-        callback(ok and type(data) == "table" and data or {})
-      end)
-    end
-  )
 end
 
 -- ── diff viewer ────────────────────────────────────────────────────────────
