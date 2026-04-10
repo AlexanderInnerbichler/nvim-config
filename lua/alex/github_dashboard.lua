@@ -654,8 +654,10 @@ local function open_win()
     col      = col,
     style    = "minimal",
     border   = "rounded",
-    title    = " GitHub Dashboard ",
-    title_pos = "center",
+    title      = " GitHub Dashboard ",
+    title_pos  = "center",
+    footer     = " <CR> open  ·  w watch  ·  r refresh  ·  <leader>gw watchlist  ·  <leader>gn notifs  ·  q close ",
+    footer_pos = "center",
   })
 
   vim.wo[state.win].number         = false
