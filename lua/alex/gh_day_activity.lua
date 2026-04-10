@@ -89,12 +89,35 @@ local function render_events(lines, hl_specs, username, date, events, err)
     return
   end
 
+  -- aggregate push events by repo so multiple pushes to the same repo
+  -- on the same day appear as a single "pushed N commits" line
+  local push_commits  = {}  -- repo → total commit count
   for _, ev in ipairs(events) do
-    local repo, summary = event_summary(ev)
+    if ev.type == "PushEvent" then
+      local repo = (ev.repo or {}).name or "?"
+      local p    = ev.payload or {}
+      local n    = p.distinct_size or p.size or #(p.commits or {})
+      push_commits[repo] = (push_commits[repo] or 0) + n
+    end
+  end
+
+  local push_rendered = {}
+  for _, ev in ipairs(events) do
+    local repo, summary
+    if ev.type == "PushEvent" then
+      repo = (ev.repo or {}).name or "?"
+      if push_rendered[repo] then goto continue end
+      push_rendered[repo] = true
+      local n = push_commits[repo] or 0
+      summary = string.format("pushed %d commit%s", n, n == 1 and "" or "s")
+    else
+      repo, summary = event_summary(ev)
+    end
     local row = string.format("  %-40s  %s", repo, summary)
     table.insert(lines, row)
     table.insert(hl_specs, { hl = "GhRepo",  line = #lines - 1, col_s = 2,  col_e = 42 })
     table.insert(hl_specs, { hl = "GhStats", line = #lines - 1, col_s = 44, col_e = #row })
+    ::continue::
   end
 end
 
