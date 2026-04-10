@@ -28,7 +28,8 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "GhReaderSep",      { fg = "#3b4048"                             })
   vim.api.nvim_set_hl(0, "GhReaderSection",  { fg = "#88c0d0", bold = true                })
   vim.api.nvim_set_hl(0, "GhReaderEmpty",    { fg = "#4b5263", italic = true              })
-  vim.api.nvim_set_hl(0, "GhReaderError",    { fg = "#e06c75"                             })
+  vim.api.nvim_set_hl(0, "GhReaderError",       { fg = "#e06c75"                           })
+  vim.api.nvim_set_hl(0, "GhReaderBreadcrumb", { fg = "#4b5263"                           })
   vim.api.nvim_set_hl(0, "GhReaderH2",       { fg = "#88c0d0", bold = true                })
   vim.api.nvim_set_hl(0, "GhReaderH3",       { fg = "#6b7a8d", bold = true                })
   vim.api.nvim_set_hl(0, "GhReaderCode",     { fg = "#4b5263"                             })
@@ -135,8 +136,12 @@ local function register_keymaps()
   local function bmap(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = state.buf, nowait = true, silent = true })
   end
-  bmap("q",     close_popup)
-  bmap("<Esc>", close_popup)
+  local function back()
+    close_popup()
+    require("alex.github_dashboard").focus_win()
+  end
+  bmap("q",     back)
+  bmap("<Esc>", back)
   bmap("r", function()
     if state.item then M.open(state.item) end
   end)
@@ -243,7 +248,8 @@ local function register_keymaps()
   end)
 end
 
-local function open_popup(title)
+local function open_popup(title, footer)
+  footer = footer or ""
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
     state.buf = vim.api.nvim_create_buf(false, true)
     vim.bo[state.buf].buftype    = "nofile"
@@ -252,7 +258,10 @@ local function open_popup(title)
     vim.bo[state.buf].filetype   = "text"
   end
   if state.win and vim.api.nvim_win_is_valid(state.win) then
-    vim.api.nvim_win_set_config(state.win, { title = " " .. title .. " ", title_pos = "center" })
+    vim.api.nvim_win_set_config(state.win, {
+      title = " " .. title .. " ", title_pos = "center",
+      footer = footer ~= "" and (" " .. footer .. " ") or nil, footer_pos = "center",
+    })
     return
   end
   local ui     = vim.api.nvim_list_uis()[1] or { width = 180, height = 50 }
@@ -261,15 +270,17 @@ local function open_popup(title)
   local row    = math.floor((ui.height - height) / 2)
   local col    = math.floor((ui.width  - width)  / 2)
   state.win = vim.api.nvim_open_win(state.buf, true, {
-    relative  = "editor",
-    width     = width,
-    height    = height,
-    row       = row,
-    col       = col,
-    style     = "minimal",
-    border    = "rounded",
-    title     = " " .. title .. " ",
-    title_pos = "center",
+    relative   = "editor",
+    width      = width,
+    height     = height,
+    row        = row,
+    col        = col,
+    style      = "minimal",
+    border     = "rounded",
+    title      = " " .. title .. " ",
+    title_pos  = "center",
+    footer     = footer ~= "" and (" " .. footer .. " ") or nil,
+    footer_pos = "center",
   })
   vim.wo[state.win].number         = false
   vim.wo[state.win].relativenumber = false
@@ -504,6 +515,13 @@ local function render_issue(data)
   local lines    = {}
   local hl_specs = {}
 
+  local crumb_prefix = "  GitHub Dashboard  ›  "
+  local crumb_title  = "#" .. data.number .. "  " .. sl(data.title):sub(1, 50)
+  local crumb = crumb_prefix .. crumb_title
+  table.insert(lines, crumb)
+  table.insert(hl_specs, { hl = "GhReaderBreadcrumb", line = #lines - 1, col_s = 0,             col_e = #crumb_prefix })
+  table.insert(hl_specs, { hl = "GhReaderTitle",      line = #lines - 1, col_s = #crumb_prefix, col_e = -1 })
+
   table.insert(lines, "")
   local title_line = "  #" .. data.number .. "  " .. sl(data.title)
   table.insert(lines, title_line)
@@ -523,7 +541,8 @@ local function render_issue(data)
   process_body(data.body, lines, hl_specs)
   render_comments_section(lines, hl_specs, data.comments)
 
-  open_popup("#" .. data.number .. "  " .. sl(data.title):sub(1, 55))
+  local issue_footer = "q back  ·  r refresh  ·  c comment  ·  x close issue"
+  open_popup("#" .. data.number .. "  " .. sl(data.title):sub(1, 55), issue_footer)
   write_buf(lines, hl_specs)
 end
 
@@ -532,6 +551,13 @@ end
 local function render_pr(data)
   local lines    = {}
   local hl_specs = {}
+
+  local crumb_prefix = "  GitHub Dashboard  ›  "
+  local crumb_title  = "#" .. data.number .. "  " .. sl(data.title):sub(1, 50)
+  local crumb = crumb_prefix .. crumb_title
+  table.insert(lines, crumb)
+  table.insert(hl_specs, { hl = "GhReaderBreadcrumb", line = #lines - 1, col_s = 0,             col_e = #crumb_prefix })
+  table.insert(hl_specs, { hl = "GhReaderTitle",      line = #lines - 1, col_s = #crumb_prefix, col_e = -1 })
 
   table.insert(lines, "")
   local draft_tag  = data.is_draft and "  [draft]" or ""
@@ -605,7 +631,8 @@ local function render_pr(data)
   render_reviews_section(lines, hl_specs, data.reviews)
   render_comments_section(lines, hl_specs, data.comments)
 
-  open_popup("#" .. data.number .. "  " .. sl(data.title):sub(1, 55))
+  local pr_footer = "q back  ·  r refresh  ·  c comment  ·  a review  ·  m merge"
+  open_popup("#" .. data.number .. "  " .. sl(data.title):sub(1, 55), pr_footer)
   write_buf(lines, hl_specs)
 end
 
@@ -737,11 +764,15 @@ end
 function M.open(item)
   state.item = item
   state.data = nil
-  open_popup("#" .. tostring(item.number) .. " — loading…")
+  open_popup("#" .. tostring(item.number) .. " — loading…", "q back")
 
+  local crumb_prefix = "  GitHub Dashboard  ›  "
   vim.bo[state.buf].modifiable = true
-  vim.api.nvim_buf_set_lines(state.buf, 0, -1, false,
-    { "", "  ⠋ loading #" .. tostring(item.number) .. " from " .. item.repo .. "…" })
+  vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, {
+    crumb_prefix .. "#" .. tostring(item.number),
+    "",
+    "  ⠋ loading #" .. tostring(item.number) .. " from " .. item.repo .. "…",
+  })
   vim.bo[state.buf].modifiable = false
 
   if item.kind == "issue" then

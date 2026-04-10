@@ -712,4 +712,10 @@ M.setup = function()
   })
 end
 
+M.focus_win = function()
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    vim.api.nvim_set_current_win(state.win)
+  end
+end
+
 return M
