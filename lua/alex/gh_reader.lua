@@ -2,7 +2,7 @@ local M = {}
 
 -- ── constants ──────────────────────────────────────────────────────────────
 
-local SPLIT_WIDTH = 85
+local CODE_WIDTH = 70  -- inner width of code boxes
 
 -- ── state ──────────────────────────────────────────────────────────────────
 
@@ -20,28 +20,33 @@ local state = {
 local ns = vim.api.nvim_create_namespace("GhReader")
 
 local function setup_highlights()
-  -- GhReaderTitle removed: render-markdown.nvim H1 styling replaces it
-  vim.api.nvim_set_hl(0, "GhReaderMeta",     { fg = "#4b5263",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReaderStateOpen",   { fg = "#a3be8c", bold = true, bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReaderStateClosed", { fg = "#e06c75", bold = true, bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReaderStateMerged", { fg = "#b48ead", bold = true, bg = "NONE" })
-  -- GhReaderSection removed: render-markdown.nvim H2 styling replaces it
-  vim.api.nvim_set_hl(0, "GhReaderSep",      { fg = "#3b4048",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReaderBody",     { fg = "#abb2bf",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReaderEmpty",    { fg = "#4b5263", italic = true, bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReaderError",    { fg = "#e06c75",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhCiPass",         { fg = "#a3be8c",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhCiFail",         { fg = "#e06c75",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhCiPending",      { fg = "#e5c07b",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReviewApproved", { fg = "#a3be8c",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReviewChanges",  { fg = "#e06c75",                bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhReviewComment",  { fg = "#616e88",                bg = "NONE" })
+  vim.api.nvim_set_hl(0, "GhReaderTitle",    { fg = "#7fc8f8", bold = true                })
+  vim.api.nvim_set_hl(0, "GhReaderMeta",     { fg = "#4b5263"                             })
+  vim.api.nvim_set_hl(0, "GhReaderStateOpen",   { fg = "#a3be8c", bold = true             })
+  vim.api.nvim_set_hl(0, "GhReaderStateClosed", { fg = "#e06c75", bold = true             })
+  vim.api.nvim_set_hl(0, "GhReaderStateMerged", { fg = "#b48ead", bold = true             })
+  vim.api.nvim_set_hl(0, "GhReaderSep",      { fg = "#3b4048"                             })
+  vim.api.nvim_set_hl(0, "GhReaderSection",  { fg = "#88c0d0", bold = true                })
+  vim.api.nvim_set_hl(0, "GhReaderEmpty",    { fg = "#4b5263", italic = true              })
+  vim.api.nvim_set_hl(0, "GhReaderError",    { fg = "#e06c75"                             })
+  vim.api.nvim_set_hl(0, "GhReaderH2",       { fg = "#88c0d0", bold = true                })
+  vim.api.nvim_set_hl(0, "GhReaderH3",       { fg = "#6b7a8d", bold = true                })
+  vim.api.nvim_set_hl(0, "GhReaderCode",     { fg = "#4b5263"                             })
+  vim.api.nvim_set_hl(0, "GhReaderCodeBody", { fg = "#abb2bf", bg = "#1e1e26"             })
+  vim.api.nvim_set_hl(0, "GhReaderBullet",   { fg = "#e5c07b"                             })
+  vim.api.nvim_set_hl(0, "GhReaderQuote",    { fg = "#616e88", italic = true              })
+  vim.api.nvim_set_hl(0, "GhCiPass",         { fg = "#a3be8c"                             })
+  vim.api.nvim_set_hl(0, "GhCiFail",         { fg = "#e06c75"                             })
+  vim.api.nvim_set_hl(0, "GhCiPending",      { fg = "#e5c07b"                             })
+  vim.api.nvim_set_hl(0, "GhReviewApproved", { fg = "#a3be8c"                             })
+  vim.api.nvim_set_hl(0, "GhReviewChanges",  { fg = "#e06c75"                             })
+  vim.api.nvim_set_hl(0, "GhReviewComment",  { fg = "#616e88"                             })
 end
 
 -- ── helpers ────────────────────────────────────────────────────────────────
 
 local function separator()
-  return "  " .. string.rep("─", SPLIT_WIDTH - 4)
+  return "  " .. string.rep("─", CODE_WIDTH + 2)
 end
 
 local function age_string(iso8601)
@@ -83,7 +88,6 @@ local function write_buf(lines, hl_specs)
   vim.bo[state.buf].modifiable = true
   vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
   vim.bo[state.buf].modifiable = false
-  vim.schedule(function() vim.cmd("redraw") end)
   vim.api.nvim_buf_clear_namespace(state.buf, ns, 0, -1)
   for _, spec in ipairs(hl_specs) do
     local col_e = spec.col_e == -1 and -1 or spec.col_e
@@ -112,7 +116,7 @@ end
 
 -- ── window management ──────────────────────────────────────────────────────
 
-local function close_split()
+local function close_popup()
   if state.win and vim.api.nvim_win_is_valid(state.win) then
     vim.api.nvim_win_close(state.win, false)
     state.win = nil
@@ -131,8 +135,8 @@ local function register_keymaps()
   local function bmap(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = state.buf, nowait = true, silent = true })
   end
-  bmap("q",     close_split)
-  bmap("<Esc>", close_split)
+  bmap("q",     close_popup)
+  bmap("<Esc>", close_popup)
   bmap("r", function()
     if state.item then M.open(state.item) end
   end)
@@ -207,7 +211,6 @@ local function register_keymaps()
                 vim.notify("Merge failed: " .. err, vim.log.levels.ERROR)
               else
                 vim.notify("PR #" .. item.number .. " merged", vim.log.levels.INFO)
-                -- Invalidate dashboard cache
                 local cache = vim.fn.expand("~/.cache/nvim/gh-dashboard.json")
                 vim.uv.fs_unlink(cache, function() end)
                 M.open(item)
@@ -240,22 +243,34 @@ local function register_keymaps()
   end)
 end
 
-local function open_split()
-  if state.win and vim.api.nvim_win_is_valid(state.win) then
-    vim.api.nvim_set_current_win(state.win)
-    return
-  end
+local function open_popup(title)
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
     state.buf = vim.api.nvim_create_buf(false, true)
     vim.bo[state.buf].buftype    = "nofile"
     vim.bo[state.buf].bufhidden  = "wipe"
     vim.bo[state.buf].modifiable = false
-    vim.bo[state.buf].filetype   = "markdown"
+    vim.bo[state.buf].filetype   = "text"
   end
-  vim.cmd("botright vsplit")
-  state.win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(state.win, state.buf)
-  vim.api.nvim_win_set_width(state.win, SPLIT_WIDTH)
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    vim.api.nvim_win_set_config(state.win, { title = " " .. title .. " ", title_pos = "center" })
+    return
+  end
+  local ui     = vim.api.nvim_list_uis()[1] or { width = 180, height = 50 }
+  local width  = math.floor(ui.width  * 0.80)
+  local height = math.floor(ui.height * 0.85)
+  local row    = math.floor((ui.height - height) / 2)
+  local col    = math.floor((ui.width  - width)  / 2)
+  state.win = vim.api.nvim_open_win(state.buf, true, {
+    relative  = "editor",
+    width     = width,
+    height    = height,
+    row       = row,
+    col       = col,
+    style     = "minimal",
+    border    = "rounded",
+    title     = " " .. title .. " ",
+    title_pos = "center",
+  })
   vim.wo[state.win].number         = false
   vim.wo[state.win].relativenumber = false
   vim.wo[state.win].signcolumn     = "no"
@@ -372,21 +387,75 @@ local function state_hl(s)
   end
 end
 
-local function render_body_lines(lines, hl_specs, body)
+local function process_body(body, lines, hl_specs)
   if body == "" then
-    table.insert(lines, "   (no description)")
+    local msg = "   (no description)"
+    table.insert(lines, msg)
     table.insert(hl_specs, { hl = "GhReaderEmpty", line = #lines - 1, col_s = 0, col_e = -1 })
     return
   end
-  for raw_line in (body .. "\n"):gmatch("([^\n]*)\n") do
-    table.insert(lines, raw_line)
+  local in_code = false
+  for raw in (body .. "\n"):gmatch("([^\n]*)\n") do
+    if raw:match("^```") then
+      if in_code then
+        table.insert(lines, "  ╰" .. string.rep("─", CODE_WIDTH) .. "╯")
+        table.insert(hl_specs, { hl = "GhReaderCode", line = #lines - 1, col_s = 0, col_e = -1 })
+        in_code = false
+      else
+        local lang = (raw:match("^```(.-)%s*$") or ""):gsub("%s+", "")
+        local label = lang ~= "" and (" " .. lang .. " ") or ""
+        local fill  = string.rep("─", math.max(0, CODE_WIDTH - #label - 1))
+        table.insert(lines, "  ╭─" .. label .. fill .. "╮")
+        table.insert(hl_specs, { hl = "GhReaderCode", line = #lines - 1, col_s = 0, col_e = -1 })
+        in_code = true
+      end
+    elseif in_code then
+      table.insert(lines, "  │ " .. raw)
+      table.insert(hl_specs, { hl = "GhReaderCodeBody", line = #lines - 1, col_s = 0, col_e = -1 })
+    elseif raw:match("^> ") then
+      local quote = raw:match("^> (.*)$") or ""
+      table.insert(lines, "  ┃ " .. quote)
+      table.insert(hl_specs, { hl = "GhReaderQuote", line = #lines - 1, col_s = 0, col_e = -1 })
+    elseif raw:match("^(#+) ") then
+      local level   = #(raw:match("^(#+) "))
+      local heading = raw:match("^#+%s+(.+)$") or ""
+      table.insert(lines, "")
+      if level <= 2 then
+        table.insert(lines, "  " .. heading)
+        table.insert(hl_specs, { hl = "GhReaderH2", line = #lines - 1, col_s = 2, col_e = -1 })
+        table.insert(lines, "  " .. string.rep("─", math.min(#heading, CODE_WIDTH)))
+        table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+      else
+        table.insert(lines, "  ▸ " .. heading)
+        table.insert(hl_specs, { hl = "GhReaderH3", line = #lines - 1, col_s = 2, col_e = -1 })
+      end
+    elseif raw:match("^%s*[%-%*%+] ") then
+      local item = raw:match("^%s*[%-%*%+] (.*)$") or ""
+      table.insert(lines, "  • " .. item)
+      table.insert(hl_specs, { hl = "GhReaderBullet", line = #lines - 1, col_s = 2, col_e = 5 })
+    elseif raw:match("^%s*%d+%. ") then
+      local item = raw:match("^%s*(%d+%..*)$") or raw
+      table.insert(lines, "  " .. item)
+    elseif raw:match("^%-%-%-+$") or raw:match("^%*%*%*+$") or raw:match("^___+$") then
+      table.insert(lines, "  " .. string.rep("─", CODE_WIDTH))
+      table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+    else
+      table.insert(lines, "  " .. raw)
+    end
+  end
+  if in_code then
+    table.insert(lines, "  ╰" .. string.rep("─", CODE_WIDTH) .. "╯")
+    table.insert(hl_specs, { hl = "GhReaderCode", line = #lines - 1, col_s = 0, col_e = -1 })
   end
 end
 
 local function render_comments_section(lines, hl_specs, comments)
   table.insert(lines, "")
-  table.insert(lines, "---")
-  table.insert(lines, "## 💬 Comments (" .. #comments .. ")")
+  table.insert(lines, separator())
+  table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+  local header = "  💬 Comments (" .. #comments .. ")"
+  table.insert(lines, header)
+  table.insert(hl_specs, { hl = "GhReaderSection", line = #lines - 1, col_s = 0, col_e = #header })
   if #comments == 0 then
     local msg = "   No comments yet"
     table.insert(lines, msg)
@@ -395,33 +464,37 @@ local function render_comments_section(lines, hl_specs, comments)
   end
   for _, c in ipairs(comments) do
     table.insert(lines, "")
-    table.insert(lines, "---")
-    table.insert(lines, "#### @" .. sl(c.author) .. "  ·  " .. age_string(c.created_at))
-    table.insert(lines, "")
-    render_body_lines(lines, hl_specs, c.body)
+    local meta = "  @" .. sl(c.author) .. "  ·  " .. age_string(c.created_at)
+    table.insert(lines, meta)
+    table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 0, col_e = -1 })
+    table.insert(lines, "  " .. string.rep("╌", CODE_WIDTH))
+    table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+    process_body(c.body, lines, hl_specs)
   end
 end
 
 local function render_reviews_section(lines, hl_specs, reviews)
-  -- only show reviews with a non-empty body
   local with_body = {}
   for _, r in ipairs(reviews) do
     if r.body ~= "" then table.insert(with_body, r) end
   end
   if #with_body == 0 then return end
   table.insert(lines, "")
-  table.insert(lines, "---")
-  table.insert(lines, "## 🔍 Reviews (" .. #with_body .. ")")
+  table.insert(lines, separator())
+  table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+  local header = "  🔍 Reviews (" .. #with_body .. ")"
+  table.insert(lines, header)
+  table.insert(hl_specs, { hl = "GhReaderSection", line = #lines - 1, col_s = 0, col_e = #header })
   for _, r in ipairs(with_body) do
     table.insert(lines, "")
-    table.insert(lines, "---")
     local state_icon = r.state == "APPROVED" and "✓" or (r.state == "CHANGES_REQUESTED" and "✗" or "·")
+    local meta = "  " .. state_icon .. " @" .. sl(r.author) .. "  ·  " .. r.state:lower():gsub("_", " ") .. "  ·  " .. age_string(r.submitted_at)
     local hl = r.state == "APPROVED" and "GhReviewApproved" or (r.state == "CHANGES_REQUESTED" and "GhReviewChanges" or "GhReviewComment")
-    local author_line = "#### " .. state_icon .. " @" .. sl(r.author) .. "  ·  " .. r.state:lower():gsub("_", " ") .. "  ·  " .. age_string(r.submitted_at)
-    table.insert(lines, author_line)
+    table.insert(lines, meta)
     table.insert(hl_specs, { hl = hl, line = #lines - 1, col_s = 0, col_e = -1 })
-    table.insert(lines, "")
-    render_body_lines(lines, hl_specs, r.body)
+    table.insert(lines, "  " .. string.rep("╌", CODE_WIDTH))
+    table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+    process_body(r.body, lines, hl_specs)
   end
 end
 
@@ -432,26 +505,25 @@ local function render_issue(data)
   local hl_specs = {}
 
   table.insert(lines, "")
-
-  -- title line (H1 → render-markdown.nvim renders with full-width background)
-  local title_line = "# #" .. data.number .. "  " .. sl(data.title)
+  local title_line = "  #" .. data.number .. "  " .. sl(data.title)
   table.insert(lines, title_line)
+  table.insert(hl_specs, { hl = "GhReaderTitle", line = #lines - 1, col_s = 0, col_e = -1 })
 
-  -- meta line: state · author · labels · age
-  local state_tag = " " .. data.state .. " "
+  local state_tag  = " " .. data.state .. " "
   local labels_str = #data.labels > 0 and ("  · " .. table.concat(data.labels, " · ")) or ""
-  local meta = "  " .. state_tag .. "  @" .. sl(data.author) .. labels_str .. "  ·  " .. age_string(data.created_at)
+  local meta       = "  " .. state_tag .. "  @" .. sl(data.author) .. labels_str .. "  ·  " .. age_string(data.created_at)
   table.insert(lines, meta)
   table.insert(hl_specs, { hl = state_hl(data.state), line = #lines - 1, col_s = 2, col_e = 2 + #state_tag })
-  table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 2 + #state_tag, col_e = -1 })
+  table.insert(hl_specs, { hl = "GhReaderMeta",       line = #lines - 1, col_s = 2 + #state_tag, col_e = -1 })
 
   table.insert(lines, separator())
   table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
   table.insert(lines, "")
 
-  render_body_lines(lines, hl_specs, data.body)
+  process_body(data.body, lines, hl_specs)
   render_comments_section(lines, hl_specs, data.comments)
 
+  open_popup("#" .. data.number .. "  " .. sl(data.title):sub(1, 55))
   write_buf(lines, hl_specs)
 end
 
@@ -462,35 +534,30 @@ local function render_pr(data)
   local hl_specs = {}
 
   table.insert(lines, "")
-
-  -- title line (H1 → render-markdown.nvim renders with full-width background)
-  local draft_tag = data.is_draft and "  [draft]" or ""
-  local title_line = "# #" .. data.number .. "  " .. sl(data.title) .. draft_tag
+  local draft_tag  = data.is_draft and "  [draft]" or ""
+  local title_line = "  #" .. data.number .. "  " .. sl(data.title) .. draft_tag
   table.insert(lines, title_line)
+  table.insert(hl_specs, { hl = "GhReaderTitle", line = #lines - 1, col_s = 0, col_e = -1 })
 
-  -- meta: state · author · age
   local state_tag = " " .. data.state .. " "
-  local meta = "  " .. state_tag .. "  @" .. sl(data.author) .. "  ·  " .. age_string(data.created_at)
+  local meta      = "  " .. state_tag .. "  @" .. sl(data.author) .. "  ·  " .. age_string(data.created_at)
   table.insert(lines, meta)
   table.insert(hl_specs, { hl = state_hl(data.state), line = #lines - 1, col_s = 2, col_e = 2 + #state_tag })
-  table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 2 + #state_tag, col_e = -1 })
+  table.insert(hl_specs, { hl = "GhReaderMeta",       line = #lines - 1, col_s = 2 + #state_tag, col_e = -1 })
 
-  -- branch line
   local mergeable_icon = data.mergeable == "MERGEABLE" and "✓" or (data.mergeable == "CONFLICTING" and "✗" or "?")
-  local branch_line = "  ⎇  " .. sl(data.head_ref) .. " → " .. sl(data.base_ref)
-    .. "   merge: " .. mergeable_icon
+  local branch_line    = "  ⎇  " .. sl(data.head_ref) .. " → " .. sl(data.base_ref) .. "   merge: " .. mergeable_icon
   table.insert(lines, branch_line)
   table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 0, col_e = -1 })
 
-  -- CI checks line
   if #data.ci_checks > 0 then
-    local parts = { "  CI: " }
-    local ci_hls = {}
-    local col = #"  CI: "
+    local parts   = { "  CI: " }
+    local ci_hls  = {}
+    local col     = #"  CI: "
     for _, check in ipairs(data.ci_checks) do
-      local s = safe_str(check.status):upper()
+      local s    = safe_str(check.status):upper()
       local icon = (s == "SUCCESS" or s == "COMPLETED") and "✓" or (s == "FAILURE" or s == "ERROR") and "✗" or "⠋"
-      local hl = (icon == "✓") and "GhCiPass" or (icon == "✗") and "GhCiFail" or "GhCiPending"
+      local hl   = (icon == "✓") and "GhCiPass" or (icon == "✗") and "GhCiFail" or "GhCiPending"
       local chunk = icon .. " " .. sl(check.name) .. "  "
       table.insert(ci_hls, { hl = hl, col_s = col, col_e = col + #icon })
       col = col + #chunk
@@ -503,20 +570,18 @@ local function render_pr(data)
       table.insert(hl_specs, { hl = h.hl, line = ln, col_s = h.col_s, col_e = h.col_e })
     end
   else
-    local ci_line = "  CI: no checks"
-    table.insert(lines, ci_line)
+    table.insert(lines, "  CI: no checks")
     table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 0, col_e = -1 })
   end
 
-  -- reviews summary line
   if #data.reviews > 0 then
-    local parts = { "  Reviews: " }
+    local parts  = { "  Reviews: " }
     local rev_hls = {}
-    local col = #"  Reviews: "
+    local col    = #"  Reviews: "
     for _, r in ipairs(data.reviews) do
-      local icon = r.state == "APPROVED" and "✓" or (r.state == "CHANGES_REQUESTED" and "✗" or "·")
-      local hl   = r.state == "APPROVED" and "GhReviewApproved" or (r.state == "CHANGES_REQUESTED" and "GhReviewChanges" or "GhReviewComment")
-      local chunk = icon .. " " .. r.author .. "  "
+      local icon  = r.state == "APPROVED" and "✓" or (r.state == "CHANGES_REQUESTED" and "✗" or "·")
+      local hl    = r.state == "APPROVED" and "GhReviewApproved" or (r.state == "CHANGES_REQUESTED" and "GhReviewChanges" or "GhReviewComment")
+      local chunk = icon .. " " .. sl(r.author) .. "  "
       table.insert(rev_hls, { hl = hl, col_s = col, col_e = col + #icon })
       col = col + #chunk
       table.insert(parts, chunk)
@@ -528,8 +593,7 @@ local function render_pr(data)
       table.insert(hl_specs, { hl = h.hl, line = ln, col_s = h.col_s, col_e = h.col_e })
     end
   else
-    local rev_line = "  Reviews: none"
-    table.insert(lines, rev_line)
+    table.insert(lines, "  Reviews: none")
     table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 0, col_e = -1 })
   end
 
@@ -537,10 +601,11 @@ local function render_pr(data)
   table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
   table.insert(lines, "")
 
-  render_body_lines(lines, hl_specs, data.body)
+  process_body(data.body, lines, hl_specs)
   render_reviews_section(lines, hl_specs, data.reviews)
   render_comments_section(lines, hl_specs, data.comments)
 
+  open_popup("#" .. data.number .. "  " .. sl(data.title):sub(1, 55))
   write_buf(lines, hl_specs)
 end
 
@@ -568,7 +633,6 @@ function M.open_input(hint, on_submit)
   vim.wo[state.input_win].relativenumber = false
   vim.wo[state.input_win].signcolumn     = "no"
 
-  -- cursor to line 2
   vim.api.nvim_win_set_cursor(state.input_win, { 2, 0 })
   vim.cmd("startinsert")
 
@@ -581,7 +645,6 @@ function M.open_input(hint, on_submit)
 
   local function do_submit()
     local all_lines = vim.api.nvim_buf_get_lines(state.input_buf, 0, -1, false)
-    -- skip the hint line
     local body_lines = {}
     for i = 2, #all_lines do
       table.insert(body_lines, all_lines[i])
@@ -602,7 +665,6 @@ function M.open_input(hint, on_submit)
   imap("i", "<leader>s", function() vim.cmd("stopinsert") do_submit() end)
   imap("n", "<Esc><Esc>", do_cancel)
 
-  -- also allow :wq and :q! via autocmd
   vim.api.nvim_create_autocmd("BufWipeout", {
     buffer = state.input_buf,
     once   = true,
@@ -621,11 +683,8 @@ function M.post_comment(item, body, callback)
     or  { "gh", "pr",    "comment", tostring(item.number), "-R", item.repo, "--body", body }
   vim.system(cmd, { text = true }, function(result)
     vim.schedule(function()
-      if result.code ~= 0 then
-        callback(result.stderr or "gh error")
-      else
-        callback(nil)
-      end
+      if result.code ~= 0 then callback(result.stderr or "gh error")
+      else callback(nil) end
     end)
   end)
 end
@@ -639,11 +698,8 @@ function M.submit_review(item, kind, body, callback)
     { text = true },
     function(result)
       vim.schedule(function()
-        if result.code ~= 0 then
-          callback(result.stderr or "gh error")
-        else
-          callback(nil)
-        end
+        if result.code ~= 0 then callback(result.stderr or "gh error")
+        else callback(nil) end
       end)
     end
   )
@@ -656,11 +712,8 @@ function M.merge_pr(item, method, callback)
     { text = true },
     function(result)
       vim.schedule(function()
-        if result.code ~= 0 then
-          callback(result.stderr or "gh error")
-        else
-          callback(nil)
-        end
+        if result.code ~= 0 then callback(result.stderr or "gh error")
+        else callback(nil) end
       end)
     end
   )
@@ -672,11 +725,8 @@ function M.close_issue(item, callback)
     { text = true },
     function(result)
       vim.schedule(function()
-        if result.code ~= 0 then
-          callback(result.stderr or "gh error")
-        else
-          callback(nil)
-        end
+        if result.code ~= 0 then callback(result.stderr or "gh error")
+        else callback(nil) end
       end)
     end
   )
@@ -687,9 +737,8 @@ end
 function M.open(item)
   state.item = item
   state.data = nil
-  open_split()
+  open_popup("#" .. tostring(item.number) .. " — loading…")
 
-  -- show loading placeholder
   vim.bo[state.buf].modifiable = true
   vim.api.nvim_buf_set_lines(state.buf, 0, -1, false,
     { "", "  ⠋ loading #" .. tostring(item.number) .. " from " .. item.repo .. "…" })
@@ -699,8 +748,7 @@ function M.open(item)
     fetch_issue(item, function(err, data)
       if err then
         vim.bo[state.buf].modifiable = true
-        vim.api.nvim_buf_set_lines(state.buf, 0, -1, false,
-          { "", "  ✗ " .. err })
+        vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, { "", "  ✗ " .. sl(err) })
         vim.bo[state.buf].modifiable = false
         return
       end
@@ -711,8 +759,7 @@ function M.open(item)
     fetch_pr(item, function(err, data)
       if err then
         vim.bo[state.buf].modifiable = true
-        vim.api.nvim_buf_set_lines(state.buf, 0, -1, false,
-          { "", "  ✗ " .. err })
+        vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, { "", "  ✗ " .. sl(err) })
         vim.bo[state.buf].modifiable = false
         return
       end
