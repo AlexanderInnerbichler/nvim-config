@@ -552,12 +552,14 @@ local function fetch_and_render()
   state.is_loading = true
   apply_render()  -- show loading state immediately
 
-  local pending  = 0
-  local function done()
+  local pending   = 0
+  local any_error = false
+  local function done(had_err)
+    if had_err then any_error = true end
     pending = pending - 1
     if pending == 0 then
       state.is_loading = false
-      write_cache(state.data)
+      if not any_error then write_cache(state.data) end
       apply_render()
     end
   end
@@ -568,25 +570,25 @@ local function fetch_and_render()
     pending = pending + 3
     fetch_prs(function(err, prs)
       if err then state.data.prs_err = err else state.data.prs = prs end
-      done()
+      done(err ~= nil)
     end)
     fetch_issues(function(err, issues)
       if err then state.data.issues_err = err else state.data.issues = issues end
-      done()
+      done(err ~= nil)
     end)
     fetch_repos(function(err, repos)
       if err then state.data.repos_err = err else state.data.repos = repos end
-      done()
+      done(err ~= nil)
     end)
     if login then
       pending = pending + 2
       fetch_activity(login, function(err, activity)
         if err then state.data.activity_err = err else state.data.activity = activity end
-        done()
+        done(err ~= nil)
       end)
       fetch_contributions(function(err, contrib)
         if err then state.data.contrib_err = err else state.data.contributions = contrib end
-        done()
+        done(err ~= nil)
       end)
     end
   end
@@ -601,7 +603,7 @@ local function fetch_and_render()
       login = profile.login
     end
     start_secondary_fetches()
-    done()
+    done(err ~= nil)
   end)
 end
 
