@@ -135,6 +135,7 @@ local function close_input()
     vim.api.nvim_win_close(state.input_win, false)
     state.input_win = nil
     state.input_buf = nil
+    vim.cmd("stopinsert")
   end
 end
 
@@ -231,6 +232,11 @@ local function register_keymaps()
         )
       end
     )
+  end)
+  bmap("d", function()
+    if state.item and state.item.kind == "pr" then
+      M.open_diff(state.item)
+    end
   end)
   bmap("x", function()
     if not state.item or state.item.kind ~= "issue" then return end
@@ -411,6 +417,21 @@ local function fetch_pr(item, callback)
   )
 end
 
+local function fetch_review_comments(number, repo, callback)
+  vim.system(
+    { "gh", "api", "repos/" .. repo .. "/pulls/" .. tostring(number) .. "/comments",
+      "--jq", "[.[] | {login: .user.login, path: .path, line: (.line // .original_line), body: .body, hunk: .diff_hunk}]" },
+    { text = true },
+    function(result)
+      vim.schedule(function()
+        if result.code ~= 0 then callback({}) return end
+        local ok, data = pcall(vim.json.decode, result.stdout or "[]")
+        callback(ok and type(data) == "table" and data or {})
+      end)
+    end
+  )
+end
+
 -- ── render helpers ─────────────────────────────────────────────────────────
 
 local function state_hl(s)
@@ -507,6 +528,47 @@ local function render_comments_section(lines, hl_specs, comments)
   end
 end
 
+local function render_review_comments_section(lines, hl_specs, review_comments)
+  if #review_comments == 0 then return end
+  table.insert(lines, "")
+  table.insert(lines, separator())
+  table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+  local header = "  🔎 Review Comments (" .. #review_comments .. ")"
+  table.insert(lines, header)
+  table.insert(hl_specs, { hl = "GhReaderSection", line = #lines - 1, col_s = 0, col_e = #header })
+  for _, rc in ipairs(review_comments) do
+    table.insert(lines, "")
+    local meta = "  @" .. sl(rc.login) .. "  ·  " .. sl(rc.path) .. ":" .. tostring(rc.line or "?")
+    table.insert(lines, meta)
+    table.insert(hl_specs, { hl = "GhReaderMeta", line = #lines - 1, col_s = 0, col_e = -1 })
+    table.insert(lines, "  " .. string.rep("╌", CODE_WIDTH))
+    table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+    if rc.hunk and rc.hunk ~= "" then
+      local hunk_lines = {}
+      for hunk_line in rc.hunk:gmatch("[^\n]+") do
+        if not hunk_line:match("^@@") then
+          table.insert(hunk_lines, hunk_line)
+        end
+      end
+      local start = math.max(1, #hunk_lines - 2)
+      for i = start, #hunk_lines do
+        local hl = hunk_lines[i]
+        local display = "  " .. hl
+        table.insert(lines, display)
+        local ln = #lines - 1
+        if hl:sub(1, 1) == "+" then
+          table.insert(hl_specs, { hl = "GhDiffAdd", line = ln, col_s = 0, col_e = -1 })
+        elseif hl:sub(1, 1) == "-" then
+          table.insert(hl_specs, { hl = "GhDiffDel", line = ln, col_s = 0, col_e = -1 })
+        end
+      end
+      table.insert(lines, "  " .. string.rep("╌", CODE_WIDTH))
+      table.insert(hl_specs, { hl = "GhReaderSep", line = #lines - 1, col_s = 0, col_e = -1 })
+    end
+    process_body(rc.body, lines, hl_specs)
+  end
+end
+
 local function render_reviews_section(lines, hl_specs, reviews)
   local with_body = {}
   for _, r in ipairs(reviews) do
@@ -571,7 +633,7 @@ end
 
 -- ── PR render ──────────────────────────────────────────────────────────────
 
-local function render_pr(data)
+local function render_pr(data, review_comments)
   local lines    = {}
   local hl_specs = {}
 
@@ -653,8 +715,9 @@ local function render_pr(data)
   process_body(data.body, lines, hl_specs)
   render_reviews_section(lines, hl_specs, data.reviews)
   render_comments_section(lines, hl_specs, data.comments)
+  render_review_comments_section(lines, hl_specs, review_comments or {})
 
-  local pr_footer = "q back  ·  r refresh  ·  c comment  ·  a review  ·  m merge"
+  local pr_footer = "q back  ·  r refresh  ·  c comment  ·  a review  ·  d diff  ·  m merge"
   open_popup("#" .. data.number .. "  " .. sl(data.title):sub(1, 55), pr_footer)
   write_buf(lines, hl_specs)
 end
@@ -834,6 +897,14 @@ function M.open(item)
       render_issue(data)
     end)
   elseif item.kind == "pr" then
+    local pr_data, rc_data
+    local pending = 2
+    local function on_both()
+      pending = pending - 1
+      if pending > 0 then return end
+      state.data = pr_data
+      render_pr(pr_data, rc_data or {})
+    end
     fetch_pr(item, function(err, data)
       if err then
         vim.bo[state.buf].modifiable = true
@@ -841,8 +912,12 @@ function M.open(item)
         vim.bo[state.buf].modifiable = false
         return
       end
-      state.data = data
-      render_pr(data)
+      pr_data = data
+      on_both()
+    end)
+    fetch_review_comments(item.number, item.repo, function(data)
+      rc_data = data
+      on_both()
     end)
   elseif item.kind == "repo" then
     fetch_readme(item, function(err, body)
@@ -888,7 +963,10 @@ local function post_review_comment(number, repo, sha, path, line, side, body, ca
     function(result)
       vim.schedule(function()
         if result.code ~= 0 then
-          callback(result.stderr or "api error")
+          local msg = (result.stdout ~= "" and result.stdout)
+                   or (result.stderr ~= "" and result.stderr)
+                   or "api error"
+          callback(msg)
         else
           callback(nil)
         end
@@ -999,6 +1077,10 @@ M.open_diff = function(item)
     end
     vim.cmd("normal! \27")
     M.open_input("Review comment  |  <C-s> submit  ·  <Esc><Esc> cancel", function(body)
+      if body == "" then
+        vim.notify("Comment cannot be empty", vim.log.levels.WARN)
+        return
+      end
       post_review_comment(
         state.diff_item.number, state.diff_item.repo,
         state.diff_head_sha, info.path, info.line, info.side,

@@ -45,7 +45,7 @@
 
 - [X] T005 [US1] Rewrite `M.open_diff` in `lua/alex/gh_reader.lua` to: (a) reset `state.diff_item = item`, `state.diff_line_map = {}`, `state.diff_head_sha = nil`; (b) update footer to `" c comment · q close "`; (c) register `vim.keymap.set("v", "c", ..., { buffer = state.buf, nowait = true, silent = true })` that reads `vim.fn.getpos("'>")[2] - 1` as 0-indexed buffer line, looks up `state.diff_line_map[end_ln]`, shows `vim.notify("Cannot comment on this line")` if not found, shows `vim.notify("Still loading, please try again")` if `state.diff_head_sha` is empty, otherwise calls `vim.cmd("normal! \27")` then `M.open_input(...)` with a callback that calls `post_review_comment` and notifies on success/error; (d) use a `pending=2` fan-out to run `fetch_diff` and `fetch_head_sha` in parallel, storing `state.diff_head_sha` when SHA arrives, and calling `render_diff_content(..., state.diff_line_map)` + `write_buf` once both complete
 
-- [ ] T006 Smoke-test all seven verification scenarios from plan.md and commit all changes on branch `015-diff-line-comment`
+- [X] T006 Smoke-test all seven verification scenarios from plan.md and commit all changes on branch `015-diff-line-comment`
 
 ---
 

@@ -871,6 +871,9 @@ local function open_win()
   local row    = math.floor((ui.height - height) / 2)
   local col    = math.floor((ui.width  - width)  / 2)
 
+  local footer_default = " <CR> open  ·  w watch  ·  r refresh  ·  <leader>gw watchlist  ·  <leader>gn notifs  ·  q close "
+  local footer_pr      = " <CR> open  ·  d diff  ·  w watch  ·  r refresh  ·  q close "
+
   state.win = vim.api.nvim_open_win(state.buf, true, {
     relative = "editor",
     width    = width,
@@ -881,7 +884,7 @@ local function open_win()
     border   = "rounded",
     title      = " GitHub Dashboard ",
     title_pos  = "center",
-    footer     = " <CR> open  ·  w watch  ·  r refresh  ·  <leader>gw watchlist  ·  <leader>gn notifs  ·  q close ",
+    footer     = footer_default,
     footer_pos = "center",
   })
 
@@ -929,6 +932,22 @@ local function open_win()
     state.is_stale = false
     fetch_and_render()
   end)
+
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = state.buf,
+    callback = function()
+      if not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
+      local cur = vim.api.nvim_win_get_cursor(state.win)[1] - 1
+      local on_pr = false
+      for _, item in ipairs(state.items) do
+        if item.line == cur and item.kind == "pr" then on_pr = true; break end
+      end
+      vim.api.nvim_win_set_config(state.win, {
+        footer     = on_pr and footer_pr or footer_default,
+        footer_pos = "center",
+      })
+    end,
+  })
 end
 
 -- ── public API ─────────────────────────────────────────────────────────────
