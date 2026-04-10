@@ -641,46 +641,49 @@ end
 function M.open_input(hint, on_submit)
   close_input()
 
-  local prev_win = vim.api.nvim_get_current_win()
-
   state.input_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[state.input_buf].buftype   = "nofile"
   vim.bo[state.input_buf].bufhidden = "wipe"
   vim.bo[state.input_buf].filetype  = "markdown"
 
-  vim.api.nvim_buf_set_lines(state.input_buf, 0, -1, false, {
-    "-- " .. hint .. " --",
-    "",
-  })
+  vim.api.nvim_buf_set_lines(state.input_buf, 0, -1, false, { "", "" })
 
-  vim.cmd("belowright 10split")
-  state.input_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(state.input_win, state.input_buf)
+  local ui     = vim.api.nvim_list_uis()[1] or { width = 180, height = 50 }
+  local width  = math.floor(ui.width  * 0.60)
+  local height = 12
+  local row    = math.floor((ui.height - height) / 2)
+  local col    = math.floor((ui.width  - width)  / 2)
+
+  state.input_win = vim.api.nvim_open_win(state.input_buf, true, {
+    relative   = "editor",
+    width      = width,
+    height     = height,
+    row        = row,
+    col        = col,
+    style      = "minimal",
+    border     = "rounded",
+    title      = " " .. hint .. " ",
+    title_pos  = "center",
+    footer     = " <leader>s submit  ·  <Esc><Esc> cancel ",
+    footer_pos = "center",
+  })
   vim.wo[state.input_win].number         = false
   vim.wo[state.input_win].relativenumber = false
   vim.wo[state.input_win].signcolumn     = "no"
+  vim.wo[state.input_win].wrap           = true
+  vim.wo[state.input_win].linebreak      = true
 
-  vim.api.nvim_win_set_cursor(state.input_win, { 2, 0 })
+  vim.api.nvim_win_set_cursor(state.input_win, { 1, 0 })
   vim.cmd("startinsert")
 
   local function do_cancel()
     close_input()
-    if prev_win and vim.api.nvim_win_is_valid(prev_win) then
-      vim.api.nvim_set_current_win(prev_win)
-    end
   end
 
   local function do_submit()
     local all_lines = vim.api.nvim_buf_get_lines(state.input_buf, 0, -1, false)
-    local body_lines = {}
-    for i = 2, #all_lines do
-      table.insert(body_lines, all_lines[i])
-    end
-    local body = table.concat(body_lines, "\n"):gsub("^%s+", ""):gsub("%s+$", "")
+    local body = table.concat(all_lines, "\n"):gsub("^%s+", ""):gsub("%s+$", "")
     close_input()
-    if prev_win and vim.api.nvim_win_is_valid(prev_win) then
-      vim.api.nvim_set_current_win(prev_win)
-    end
     on_submit(body)
   end
 
@@ -693,8 +696,8 @@ function M.open_input(hint, on_submit)
   imap("n", "<Esc><Esc>", do_cancel)
 
   vim.api.nvim_create_autocmd("BufWipeout", {
-    buffer = state.input_buf,
-    once   = true,
+    buffer   = state.input_buf,
+    once     = true,
     callback = function()
       state.input_buf = nil
       state.input_win = nil
