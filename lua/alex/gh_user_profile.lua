@@ -73,7 +73,7 @@ end
 
 -- ── rendering ─────────────────────────────────────────────────────────────
 
-local function render_content(lines, hl_specs, username, profile, contrib, profile_err, contrib_err)
+local function render_content(lines, hl_specs, items, username, profile, contrib, profile_err, contrib_err)
   -- header
   local header = "  @" .. username
   table.insert(lines, header)
@@ -107,7 +107,7 @@ local function render_content(lines, hl_specs, username, profile, contrib, profi
     table.insert(hl_specs, { hl = "GhError", line = #lines - 1, col_s = 0, col_e = #msg })
     return
   end
-  heatmap.render_heatmap(lines, hl_specs, contrib)
+  heatmap.render_heatmap(lines, hl_specs, contrib, items, username)
 end
 
 -- ── popup ─────────────────────────────────────────────────────────────────
@@ -155,11 +155,23 @@ M.open = function(username)
     end
   end
 
+  local popup_items = {}
+
   local function bmap(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, silent = true })
   end
   bmap("q",     close)
   bmap("<Esc>", close)
+  bmap("<CR>", function()
+    if not vim.api.nvim_win_is_valid(win) then return end
+    local cur_line = vim.api.nvim_win_get_cursor(win)[1] - 1
+    for _, item in ipairs(popup_items) do
+      if item.line == cur_line and item.kind == "day" then
+        require("alex.gh_day_activity").open(item.username, item.date)
+        return
+      end
+    end
+  end)
 
   -- fan-out async fetches
   local pending     = 2
@@ -170,8 +182,10 @@ M.open = function(username)
 
   local function render_and_apply()
     local lines, hl_specs = {}, {}
+    local items = {}
     table.insert(lines, "")
-    render_content(lines, hl_specs, username, profile_res, contrib_res, profile_err, contrib_err)
+    render_content(lines, hl_specs, items, username, profile_res, contrib_res, profile_err, contrib_err)
+    popup_items = items
     table.insert(lines, "")
 
     if not vim.api.nvim_buf_is_valid(buf) then return end

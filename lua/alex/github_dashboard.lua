@@ -732,7 +732,8 @@ local function apply_render()
   table.insert(lines, "")  -- top padding
 
   render_profile(lines, hl_specs, data.profile, data.contributions and data.contributions.total, win_width)
-  heatmap.render_heatmap(lines, hl_specs, data.contributions)
+  local login = data.profile and data.profile.login
+  heatmap.render_heatmap(lines, hl_specs, data.contributions, items, login)
   render_prs(lines, hl_specs, items, data.prs, data.prs_err)
   render_issues(lines, hl_specs, items, data.issues, data.issues_err)
   render_activity(lines, hl_specs, data.activity, data.activity_err)
@@ -838,6 +839,8 @@ local function open_url_at_cursor()
         require("alex.gh_reader").open(item)
       elseif item.kind == "user" then
         require("alex.gh_user_profile").open(item.username)
+      elseif item.kind == "day" then
+        require("alex.gh_day_activity").open(item.username, item.date)
       else
         vim.system({ "xdg-open", item.url })
       end
