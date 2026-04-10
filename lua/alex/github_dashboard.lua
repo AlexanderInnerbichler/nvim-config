@@ -3,10 +3,9 @@ local M = {}
 -- ── constants ──────────────────────────────────────────────────────────────
 
 local CACHE_TTL = 300  -- 5 minutes
-local HEATMAP_WEEKS = 26
-
-local TIER_CHARS = { " ", "░", "▒", "▓", "█" }
-local TIER_THRESHOLDS = { 0, 1, 4, 10, 25 }
+local HEATMAP_WEEKS = 52
+local TIER_CHARS = { " ", "░", "▒", "▓", "█", "󰌽"}
+local TIER_THRESHOLDS = { 0, 1, 4, 10, 20, 35 }
 
 local EVENT_ICONS = {
   PushEvent         = "↑",
@@ -133,9 +132,10 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "GhHeat2",  { fg = "#0a7a5c", bg = "NONE" })  -- emerald
   vim.api.nvim_set_hl(0, "GhHeat3",  { fg = "#10c87e", bg = "NONE" })  -- bright teal-green
   vim.api.nvim_set_hl(0, "GhHeat4",  { fg = "#00ff99", bg = "NONE" })  -- neon mint
+  vim.api.nvim_set_hl(0, "GhHeat5",  { fg = "#00ffFF", bg = "NONE" })  
 end
 
-local HEAT_HLS = { "GhHeat0", "GhHeat1", "GhHeat2", "GhHeat3", "GhHeat4" }
+local HEAT_HLS = { "GhHeat0", "GhHeat1", "GhHeat2", "GhHeat3", "GhHeat4", "GhHeat5" }
 
 -- ── async gh runner ────────────────────────────────────────────────────────
 
@@ -486,7 +486,7 @@ local function render_heatmap(lines, hl_specs, contrib)
         local tier = day.tier or 1
         local char = TIER_CHARS[tier]
         table.insert(col_positions, { col = #table.concat(row_chars), tier = tier })
-        table.insert(row_chars, char .. " ")
+	table.insert(row_chars, char)
       else
         table.insert(row_chars, "  ")
       end

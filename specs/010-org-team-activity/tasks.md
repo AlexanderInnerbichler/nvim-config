@@ -64,7 +64,7 @@
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [ ] T007 Smoke test the full dashboard: verify Team Activity section loads asynchronously (other sections appear from cache first), verify event rows display correctly, verify `<CR>` routing for all event types, verify section absent for no-org account, commit and push `feat: add Team Activity section — org member events in dashboard`
+- [X] T007 Smoke test the full dashboard: verify Team Activity section loads asynchronously (other sections appear from cache first), verify event rows display correctly, verify `<CR>` routing for all event types, verify section absent for no-org account, commit and push `feat: add Team Activity section — org member events in dashboard`
 
 ---
 
