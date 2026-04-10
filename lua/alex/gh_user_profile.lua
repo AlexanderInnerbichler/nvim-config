@@ -74,11 +74,12 @@ end
 -- ── rendering ─────────────────────────────────────────────────────────────
 
 local function render_content(lines, hl_specs, items, username, profile, contrib, profile_err, contrib_err)
-  -- header
-  local header = "  @" .. username
-  table.insert(lines, header)
-  table.insert(hl_specs, { hl = "GhSection",  line = #lines - 1, col_s = 0,  col_e = 2 })
-  table.insert(hl_specs, { hl = "GhUsername", line = #lines - 1, col_s = 2,  col_e = #header })
+  -- breadcrumb
+  local crumb_prefix = "  GitHub Dashboard  ›  "
+  local crumb        = crumb_prefix .. "@" .. username
+  table.insert(lines, crumb)
+  table.insert(hl_specs, { hl = "GhReaderBreadcrumb", line = #lines - 1, col_s = 0,             col_e = #crumb_prefix })
+  table.insert(hl_specs, { hl = "GhReaderTitle",      line = #lines - 1, col_s = #crumb_prefix, col_e = -1 })
 
   -- profile stats
   if profile_err then
@@ -121,8 +122,8 @@ M.open = function(username)
   vim.bo[buf].filetype   = "text"
 
   local ui     = vim.api.nvim_list_uis()[1] or { width = 180, height = 50 }
-  local width  = math.floor(ui.width  * 0.80)
-  local height = math.floor(ui.height * 0.70)
+  local width  = math.floor(ui.width  * 0.90)
+  local height = math.floor(ui.height * 0.90)
   local row    = math.floor((ui.height - height) / 2)
   local col    = math.floor((ui.width  - width)  / 2)
 
