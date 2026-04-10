@@ -24,18 +24,20 @@ M.contribution_tier = function(count)
   return 2
 end
 
-M.render_heatmap = function(lines, hl_specs, contrib)
+M.render_heatmap = function(lines, hl_specs, contrib, items, username)
   if not contrib then return end
   local weeks = contrib.weeks
   if not weeks or #weeks == 0 then return end
 
-  local day_labels = { "Mo", "  ", "We", "  ", "Fr", "  ", "Su" }
+  local day_labels    = { "Mo", "  ", "We", "  ", "Fr", "  ", "Su" }
   local heatmap_lines = {}
   local heatmap_hl    = {}
+  local day_last_dates = {}
 
   for day_idx = 1, 7 do
-    local row_chars    = { "  ", day_labels[day_idx], " " }
+    local row_chars     = { "  ", day_labels[day_idx], " " }
     local col_positions = {}
+    local last_date     = nil
     for _, week in ipairs(weeks) do
       local day = week[day_idx]
       if day then
@@ -43,12 +45,14 @@ M.render_heatmap = function(lines, hl_specs, contrib)
         local char = TIER_CHARS[tier]
         table.insert(col_positions, { col = #table.concat(row_chars), tier = tier })
         table.insert(row_chars, char)
+        if day.date then last_date = day.date end
       else
         table.insert(row_chars, "  ")
       end
     end
     table.insert(heatmap_lines, table.concat(row_chars))
     table.insert(heatmap_hl, col_positions)
+    day_last_dates[day_idx] = last_date
   end
 
   local base_line = #lines
@@ -60,6 +64,14 @@ M.render_heatmap = function(lines, hl_specs, contrib)
         line  = base_line + i - 1,
         col_s = cell.col,
         col_e = cell.col + 2,
+      })
+    end
+    if items and username and day_last_dates[i] then
+      table.insert(items, {
+        line     = base_line + i - 1,
+        kind     = "day",
+        date     = day_last_dates[i],
+        username = username,
       })
     end
   end

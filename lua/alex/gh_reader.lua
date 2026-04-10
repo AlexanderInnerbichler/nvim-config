@@ -7,12 +7,15 @@ local CODE_WIDTH = 70  -- inner width of code boxes
 -- ── state ──────────────────────────────────────────────────────────────────
 
 local state = {
-  buf       = nil,
-  win       = nil,
-  item      = nil,  -- { kind, number, repo, url }
-  data      = nil,  -- decoded IssueDetail | PRDetail
-  input_buf = nil,
-  input_win = nil,
+  buf           = nil,
+  win           = nil,
+  item          = nil,  -- { kind, number, repo, url }
+  data          = nil,  -- decoded IssueDetail | PRDetail
+  input_buf     = nil,
+  input_win     = nil,
+  diff_item     = nil,  -- { number, repo } of currently displayed diff
+  diff_line_map = {},   -- [buf_line_0idx] = { path, line, side }
+  diff_head_sha = nil,  -- PR head commit SHA; nil until fetched
 }
 
 -- ── highlights ─────────────────────────────────────────────────────────────
@@ -42,6 +45,9 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "GhReviewApproved", { fg = "#a3be8c"                             })
   vim.api.nvim_set_hl(0, "GhReviewChanges",  { fg = "#e06c75"                             })
   vim.api.nvim_set_hl(0, "GhReviewComment",  { fg = "#616e88"                             })
+  vim.api.nvim_set_hl(0, "GhDiffAdd",        { fg = "#98c379"                             })
+  vim.api.nvim_set_hl(0, "GhDiffDel",        { fg = "#e06c75"                             })
+  vim.api.nvim_set_hl(0, "GhDiffHunk",       { fg = "#61afef"                             })
 end
 
 -- ── helpers ────────────────────────────────────────────────────────────────
@@ -849,6 +855,187 @@ function M.open(item)
       render_readme({ full_name = item.full_name, body = body })
     end)
   end
+end
+
+-- ── diff viewer ────────────────────────────────────────────────────────────
+
+local function fetch_head_sha(number, repo, callback)
+  vim.system(
+    { "gh", "pr", "view", tostring(number), "--repo", repo,
+      "--json", "headRefOid", "--jq", ".headRefOid" },
+    { text = true },
+    function(result)
+      vim.schedule(function()
+        if result.code ~= 0 then
+          callback(result.stderr or "gh error", nil)
+        else
+          callback(nil, vim.trim(result.stdout or ""))
+        end
+      end)
+    end
+  )
+end
+
+local function post_review_comment(number, repo, sha, path, line, side, body, callback)
+  vim.system(
+    { "gh", "api", "repos/" .. repo .. "/pulls/" .. tostring(number) .. "/comments",
+      "-f", "body=" .. body,
+      "-f", "commit_id=" .. sha,
+      "-f", "path=" .. path,
+      "-F", "line=" .. tostring(line),
+      "-f", "side=" .. side },
+    { text = true },
+    function(result)
+      vim.schedule(function()
+        if result.code ~= 0 then
+          callback(result.stderr or "api error")
+        else
+          callback(nil)
+        end
+      end)
+    end
+  )
+end
+
+local function fetch_diff(number, repo, callback)
+  vim.system(
+    { "gh", "pr", "diff", tostring(number), "--repo", repo },
+    { text = true },
+    function(result)
+      vim.schedule(function()
+        if result.code ~= 0 then
+          callback(result.stderr or "gh error", nil)
+        else
+          callback(nil, result.stdout or "")
+        end
+      end)
+    end
+  )
+end
+
+local function render_diff_content(lines, hl_specs, number, repo, diff_text, err, line_map)
+  local crumb_prefix = "  GitHub Dashboard  ›  "
+  local crumb        = crumb_prefix .. repo .. "  ›  PR #" .. number .. " diff"
+  table.insert(lines, crumb)
+  table.insert(hl_specs, { hl = "GhReaderBreadcrumb", line = #lines - 1, col_s = 0,             col_e = #crumb_prefix })
+  table.insert(hl_specs, { hl = "GhReaderTitle",      line = #lines - 1, col_s = #crumb_prefix, col_e = -1 })
+  table.insert(lines, "")
+
+  if err then
+    local msg = "  ✗ " .. err:gsub("[\n\r]", " ")
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhReaderError", line = #lines - 1, col_s = 0, col_e = #msg })
+    return
+  end
+
+  if diff_text == "" then
+    local msg = "  (no diff)"
+    table.insert(lines, msg)
+    table.insert(hl_specs, { hl = "GhReaderEmpty", line = #lines - 1, col_s = 0, col_e = #msg })
+    return
+  end
+
+  local cur_path   = nil
+  local new_line_n = 0
+  local old_line_n = 0
+
+  for raw_line in diff_text:gmatch("[^\n]+") do
+    table.insert(lines, raw_line)
+    local buf_ln = #lines - 1
+
+    if raw_line:match("^diff %-%-git") then
+      cur_path   = raw_line:match(" b/(.+)$")
+      new_line_n = 0
+      old_line_n = 0
+    elseif raw_line:match("^@@") then
+      local ns, nn = raw_line:match("@@ %-(%d+),?%d* %+(%d+),?%d* @@")
+      old_line_n = tonumber(ns or 0) - 1
+      new_line_n = tonumber(nn or 0) - 1
+      table.insert(hl_specs, { hl = "GhDiffHunk", line = buf_ln, col_s = 0, col_e = -1 })
+    elseif raw_line:sub(1, 1) == "+" and not raw_line:match("^%+%+%+") then
+      new_line_n = new_line_n + 1
+      table.insert(hl_specs, { hl = "GhDiffAdd", line = buf_ln, col_s = 0, col_e = -1 })
+      if line_map and cur_path then
+        line_map[buf_ln] = { path = cur_path, line = new_line_n, side = "RIGHT" }
+      end
+    elseif raw_line:sub(1, 1) == "-" and not raw_line:match("^%-%-%-") then
+      old_line_n = old_line_n + 1
+      table.insert(hl_specs, { hl = "GhDiffDel", line = buf_ln, col_s = 0, col_e = -1 })
+      if line_map and cur_path then
+        line_map[buf_ln] = { path = cur_path, line = old_line_n, side = "LEFT" }
+      end
+    elseif raw_line:sub(1, 1) == " " then
+      new_line_n = new_line_n + 1
+      old_line_n = old_line_n + 1
+      if line_map and cur_path then
+        line_map[buf_ln] = { path = cur_path, line = new_line_n, side = "RIGHT" }
+      end
+    end
+  end
+end
+
+M.open_diff = function(item)
+  open_popup(string.format(" PR #%d diff ", item.number), " c comment · q close ")
+  vim.wo[state.win].wrap = false
+
+  state.diff_item     = item
+  state.diff_line_map = {}
+  state.diff_head_sha = nil
+
+  write_buf({ "", "  Loading diff…" }, {})
+
+  vim.keymap.set("v", "c", function()
+    local end_ln = vim.fn.getpos("'>")[2] - 1  -- 0-indexed
+    local info   = state.diff_line_map[end_ln]
+    if not info then
+      vim.cmd("normal! \27")
+      vim.notify("Cannot comment on this line", vim.log.levels.INFO)
+      return
+    end
+    if not state.diff_head_sha or state.diff_head_sha == "" then
+      vim.cmd("normal! \27")
+      vim.notify("Still loading, please try again", vim.log.levels.INFO)
+      return
+    end
+    vim.cmd("normal! \27")
+    M.open_input("Review comment  |  <C-s> submit  ·  <Esc><Esc> cancel", function(body)
+      post_review_comment(
+        state.diff_item.number, state.diff_item.repo,
+        state.diff_head_sha, info.path, info.line, info.side,
+        body, function(err)
+          if err then
+            vim.notify("Failed: " .. err:gsub("[\n\r]", " "), vim.log.levels.ERROR)
+          else
+            vim.notify("Review comment posted", vim.log.levels.INFO)
+          end
+        end
+      )
+    end)
+  end, { buffer = state.buf, nowait = true, silent = true })
+
+  local pending = 2
+  local diff_text, diff_err, head_sha
+
+  local function on_both()
+    pending = pending - 1
+    if pending > 0 then return end
+    state.diff_head_sha = head_sha or ""
+    local lines, hl_specs = {}, {}
+    table.insert(lines, "")
+    render_diff_content(lines, hl_specs, item.number, item.repo,
+                        diff_text or "", diff_err, state.diff_line_map)
+    table.insert(lines, "")
+    write_buf(lines, hl_specs)
+  end
+
+  fetch_diff(item.number, item.repo, function(err, text)
+    diff_err, diff_text = err, text
+    on_both()
+  end)
+  fetch_head_sha(item.number, item.repo, function(_, sha)
+    head_sha = sha
+    on_both()
+  end)
 end
 
 function M.setup()
