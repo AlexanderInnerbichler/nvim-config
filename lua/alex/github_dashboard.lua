@@ -127,12 +127,12 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "GhPush",      { fg = "#7fc8f8",               bg = "NONE" })
   vim.api.nvim_set_hl(0, "GhPR",        { fg = "#b48ead",               bg = "NONE" })
   vim.api.nvim_set_hl(0, "GhIssue",     { fg = "#e5c07b",               bg = "NONE" })
-  -- heatmap tiers (greens matching GitHub)
-  vim.api.nvim_set_hl(0, "GhHeat0",  { fg = "#2d333b", bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhHeat1",  { fg = "#0e4429", bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhHeat2",  { fg = "#006d32", bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhHeat3",  { fg = "#26a641", bg = "NONE" })
-  vim.api.nvim_set_hl(0, "GhHeat4",  { fg = "#39d353", bg = "NONE" })
+  -- heatmap tiers (teal-shifted cool greens)
+  vim.api.nvim_set_hl(0, "GhHeat0",  { fg = "#1b1f2b", bg = "NONE" })  -- dark navy (empty)
+  vim.api.nvim_set_hl(0, "GhHeat1",  { fg = "#0d4a3a", bg = "NONE" })  -- deep forest teal
+  vim.api.nvim_set_hl(0, "GhHeat2",  { fg = "#0a7a5c", bg = "NONE" })  -- emerald
+  vim.api.nvim_set_hl(0, "GhHeat3",  { fg = "#10c87e", bg = "NONE" })  -- bright teal-green
+  vim.api.nvim_set_hl(0, "GhHeat4",  { fg = "#00ff99", bg = "NONE" })  -- neon mint
 end
 
 local HEAT_HLS = { "GhHeat0", "GhHeat1", "GhHeat2", "GhHeat3", "GhHeat4" }
@@ -504,7 +504,7 @@ local function render_repos(lines, hl_specs, items, repos, err)
       local age   = age_string(repo.updated_at)
       local line  = string.format("   %s  %-30s  %-10s  ★%-3d  %s",
         lock, sl(repo.name):sub(1, 30), lang:sub(1, 10), repo.stars, age)
-      table.insert(items, { line = #lines, url = repo.url, full_name = repo.full_name })
+      table.insert(items, { line = #lines, url = repo.url, full_name = repo.full_name, kind = "repo" })
       table.insert(lines, line)
       table.insert(hl_specs, { hl = "GhItem", line = #lines - 1, col_s = 0, col_e = 35 })
       table.insert(hl_specs, { hl = "GhMeta", line = #lines - 1, col_s = 45, col_e = -1 })
@@ -614,7 +614,7 @@ local function open_url_at_cursor()
   local cur_line = vim.api.nvim_win_get_cursor(state.win)[1] - 1  -- 0-indexed
   for _, item in ipairs(state.items) do
     if item.line == cur_line then
-      if item.kind == "issue" or item.kind == "pr" then
+      if item.kind == "issue" or item.kind == "pr" or item.kind == "repo" then
         require("alex.gh_reader").open(item)
       else
         vim.system({ "xdg-open", item.url })
