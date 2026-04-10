@@ -34,10 +34,7 @@ local function event_summary(ev)
   local p    = ev.payload or {}
   local repo = (ev.repo or {}).name or "?"
 
-  if t == "PushEvent" then
-    local n = p.size or 0
-    return repo, string.format("pushed %d commit%s", n, n == 1 and "" or "s")
-  elseif t == "PullRequestEvent" then
+  if t == "PullRequestEvent" then
     local pr  = p.pull_request or {}
     local num = pr.number or p.number or "?"
     local act = p.action or "updated"
@@ -89,15 +86,19 @@ local function render_events(lines, hl_specs, username, date, events, err)
     return
   end
 
-  -- aggregate push events by repo so multiple pushes to the same repo
-  -- on the same day appear as a single "pushed N commits" line
-  local push_commits  = {}  -- repo → total commit count
+  -- aggregate push events by repo; collect unique branches pushed to
+  local push_branches = {}  -- repo → list of unique branch names (ordered)
   for _, ev in ipairs(events) do
     if ev.type == "PushEvent" then
-      local repo = (ev.repo or {}).name or "?"
-      local p    = ev.payload or {}
-      local n    = p.distinct_size or p.size or #(p.commits or {})
-      push_commits[repo] = (push_commits[repo] or 0) + n
+      local repo   = (ev.repo or {}).name or "?"
+      local ref    = (ev.payload or {}).ref or ""
+      local branch = ref:gsub("^refs/heads/", "")
+      if not push_branches[repo] then push_branches[repo] = {} end
+      local seen = false
+      for _, b in ipairs(push_branches[repo]) do
+        if b == branch then seen = true; break end
+      end
+      if not seen then table.insert(push_branches[repo], branch) end
     end
   end
 
@@ -108,8 +109,8 @@ local function render_events(lines, hl_specs, username, date, events, err)
       repo = (ev.repo or {}).name or "?"
       if push_rendered[repo] then goto continue end
       push_rendered[repo] = true
-      local n = push_commits[repo] or 0
-      summary = string.format("pushed %d commit%s", n, n == 1 and "" or "s")
+      local branches = push_branches[repo] or {}
+      summary = "pushed to " .. table.concat(branches, ", ")
     else
       repo, summary = event_summary(ev)
     end
