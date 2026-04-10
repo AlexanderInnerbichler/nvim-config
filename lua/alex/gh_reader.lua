@@ -148,7 +148,7 @@ local function register_keymaps()
   bmap("c", function()
     if not state.item then return end
     local item = state.item
-    M.open_input("Write comment  |  <leader>s submit  ·  <Esc><Esc> cancel", function(body)
+    M.open_input("Write comment  |  <C-s> submit  ·  <Esc><Esc> cancel", function(body)
       if body == "" then return end
       M.post_comment(item, body, function(err)
         if err then
@@ -174,7 +174,7 @@ local function register_keymaps()
           ["Comment Only"] = "comment",
         }
         local kind = kind_map[choice]
-        M.open_input(choice .. "  |  <leader>s submit  ·  <Esc><Esc> cancel", function(body)
+        M.open_input(choice .. "  |  <C-s> submit  ·  <Esc><Esc> cancel", function(body)
           M.submit_review(item, kind, body, function(err)
             if err then
               vim.notify("Review failed: " .. err, vim.log.levels.ERROR)
@@ -701,7 +701,7 @@ function M.open_input(hint, on_submit)
     border     = "rounded",
     title      = " " .. hint .. " ",
     title_pos  = "center",
-    footer     = " <leader>s submit  ·  <Esc><Esc> cancel ",
+    footer     = " <C-s> submit  ·  <Esc><Esc> cancel ",
     footer_pos = "center",
   })
   vim.wo[state.input_win].number         = false
@@ -728,8 +728,8 @@ function M.open_input(hint, on_submit)
     vim.keymap.set(mode, lhs, fn, { buffer = state.input_buf, nowait = true, silent = true })
   end
 
-  imap("n", "<leader>s", do_submit)
-  imap("i", "<leader>s", function() vim.cmd("stopinsert") do_submit() end)
+  imap("n", "<C-s>", do_submit)
+  imap("i", "<C-s>", do_submit)
   imap("n", "<Esc><Esc>", do_cancel)
 
   vim.api.nvim_create_autocmd("BufWipeout", {

@@ -283,7 +283,7 @@ local function open_add_input()
     border     = "rounded",
     title      = " Add repo (owner/repo) ",
     title_pos  = "center",
-    footer     = " <leader>s confirm  ·  <Esc><Esc> cancel ",
+    footer     = " <C-s> confirm  ·  <Esc><Esc> cancel ",
     footer_pos = "center",
   })
   vim.wo[input_win].wrap = true
@@ -328,8 +328,8 @@ local function open_add_input()
   local function imap(mode, lhs, fn)
     vim.keymap.set(mode, lhs, fn, { buffer = input_buf, nowait = true, silent = true })
   end
-  imap("n", "<leader>s", do_confirm)
-  imap("i", "<leader>s", function() vim.cmd("stopinsert") do_confirm() end)
+  imap("n", "<C-s>", do_confirm)
+  imap("i", "<C-s>", do_confirm)
   imap("n", "<Esc><Esc>", do_cancel)
 
   vim.api.nvim_create_autocmd("BufWipeout", {
