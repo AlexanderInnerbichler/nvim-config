@@ -80,7 +80,7 @@
   ```
 - [x] T011 [US2] Delete `~/.config/nvim/lua/gh_dashboard/` entirely: `rm -rf ~/.config/nvim/lua/gh_dashboard/`
 - [x] T012 [US2] Restart Neovim and verify: 3 cold starts, zero error notifications, all 4 keymaps respond, heatmap and PR panels render correctly
-- [ ] T013 [US2] `git add -A && git commit -m "feat: load gh_dashboard via plugin dir spec, remove inline modules"` in the nvim config repo
+- [x] T013 [US2] `git add -A && git commit -m "feat: load gh_dashboard via plugin dir spec, remove inline modules"` in the nvim config repo
 
 **Checkpoint**: User Story 2 complete — `lua/gh_dashboard/` is gone from the config, dashboard works via plugin path.
 
@@ -94,7 +94,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T014 [P] [US3] Create `~/code/gh_dashboard.nvim/lua/gh_dashboard/health.lua`:
+- [x] T014 [P] [US3] Create `~/code/gh_dashboard.nvim/lua/gh_dashboard/health.lua`:
   ```lua
   local M = {}
   M.check = function()
@@ -121,7 +121,7 @@
   end
   return M
   ```
-- [ ] T015 [P] [US3] Register the health module by adding to `~/code/gh_dashboard.nvim/plugin/gh_dashboard.lua`:
+- [x] T015 [P] [US3] Register the health module by adding to `~/code/gh_dashboard.nvim/plugin/gh_dashboard.lua`:
   ```lua
   -- register :checkhealth handler
   vim.api.nvim_create_autocmd("FileType", {
@@ -131,8 +131,8 @@
   })
   ```
   Actually, Neovim discovers health modules automatically at `lua/PLUGIN/health.lua` when the module name matches — no manual registration needed. Remove the autocmd; the file location is sufficient.
-- [ ] T016 [US3] Verify `:checkhealth gh_dashboard` runs and produces output (green on working system, red/yellow if `gh` is misconfigured)
-- [ ] T017 [US3] `git add -A && git commit -m "feat: add checkhealth handler for gh CLI, auth, and scope validation"` inside `~/code/gh_dashboard.nvim/`
+- [x] T016 [US3] Verify `:checkhealth gh_dashboard` runs and produces output (green on working system, red/yellow if `gh` is misconfigured)
+- [x] T017 [US3] `git add -A && git commit -m "feat: add checkhealth handler for gh CLI, auth, and scope validation"` inside `~/code/gh_dashboard.nvim/`
 
 **Checkpoint**: User Story 3 complete — `:checkhealth gh_dashboard` works, README sufficient for a stranger to install.
 
@@ -142,9 +142,9 @@
 
 **Purpose**: Final verification, branch cleanup.
 
-- [ ] T018 [P] Run SC-001 verification: minimal `NVIM_APPNAME=nvim-test nvim` config with only `gh_dashboard.nvim` installed — dashboard opens cold, zero errors
-- [ ] T019 [P] Run SC-002 verification: confirm `~/.config/nvim/lua/gh_dashboard/` directory does not exist (`ls ~/.config/nvim/lua/` must not show `gh_dashboard`)
-- [ ] T020 [P] Run SC-005 regression check: all 4 keymaps (`<leader>gh`, `<leader>gw`, `<leader>gn`, `<leader>gu`) produce correct output; heatmap Sunday-first row order preserved
+- [x] T018 [P] Run SC-001 verification: minimal `NVIM_APPNAME=nvim-test nvim` config with only `gh_dashboard.nvim` installed — dashboard opens cold, zero errors
+- [x] T019 [P] Run SC-002 verification: confirm `~/.config/nvim/lua/gh_dashboard/` directory does not exist (`ls ~/.config/nvim/lua/` must not show `gh_dashboard`)
+- [x] T020 [P] Run SC-005 regression check: all 4 keymaps (`<leader>gh`, `<leader>gw`, `<leader>gn`, `<leader>gu`) produce correct output; heatmap Sunday-first row order preserved
 - [ ] T021 Merge and delete branch: `git checkout master && git merge --no-ff 018-extract-dashboard-standalone && git branch -d 018-extract-dashboard-standalone && git push && git push origin --delete 018-extract-dashboard-standalone`
 
 ---
