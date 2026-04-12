@@ -60,10 +60,6 @@ vim.keymap.set("n", "<leader>gw", function() require("gh_dashboard.watchlist").t
 vim.keymap.set("n", "<leader>gn", function() require("gh_dashboard.watchlist").open_latest() end, { desc = "Open latest GitHub notification" })
 vim.keymap.set("n", "<leader>gu", function() require("gh_dashboard.user_watchlist").toggle() end, { desc = "Toggle GitHub User Watchlist" })
 
--- avante
--- alot of the avante stuf is already defined
-vim.api.nvim_set_keymap("n", "<leader>at", ":AvanteToggle<CR>", {})
-
 -- neotest
 vim.keymap.set("n", "<leader>na", "<cmd>Neotest attach<cr>", { desc = "Neotest - Run All Tests" })
 vim.keymap.set("n", "<leader>nj", "<cmd>Neotest jump<cr>", { desc = "Neotest - Run File Tests" })

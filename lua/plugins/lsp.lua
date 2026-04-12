@@ -5,4 +5,6 @@
 return {
   { "seblyng/roslyn.nvim" },
   { "williamboman/mason.nvim", lazy = false },
+  { "neovim/nvim-lspconfig" },
+  { "hrsh7th/cmp-nvim-lsp" },
 }
