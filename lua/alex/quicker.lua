@@ -2,9 +2,9 @@ local main_color = "#7fc8f8"
 local namespace = vim.api.nvim_create_namespace("QuickerSymbols")
 
 local TAGS = {
-  { prefix = "#todo", icon = "󰄬 ", hl = "QuickerTodo",     color = "#f59e0b" },
-  { prefix = "#bug",  icon = "  ", hl = "QuickerBug",      color = "#f87171" },
-  { prefix = "#q",    icon = "  ", hl = "QuickerQuestion", color = "#a78bfa" },
+  { prefix = "#todo", icon = " ", hl = "QuickerTodo",     color = "#f59e0b" },
+  { prefix = "#bug",  icon = " ", hl = "QuickerBug",      color = "#f87171" },
+  { prefix = "#q",    icon = " ", hl = "QuickerQuestion", color = "#a78bfa" },
 }
 local DEFAULT_ICON = " "
 local DEFAULT_HL   = "QuickerBorder"
@@ -36,6 +36,8 @@ local function set_status_symbol(bufnr, line, text)
   })
 end
 
+local THOUGHTS_REPO = vim.fn.expand("~/thoughts")
+
 local function _db_path(filedir)
   return filedir .. "/.thoughts.alex.lua"
 end
@@ -44,6 +46,38 @@ local function _load(filedir)
   local p = _db_path(filedir)
   local ok, t = pcall(dofile, p)
   return (ok and type(t) == 'table') and t or {}
+end
+
+local function _sync_to_repo(filedir)
+  local src = _db_path(filedir)
+  if vim.fn.filereadable(src) == 0 then return end
+
+  -- derive project name from the directory (last two path components)
+  local parts = vim.split(filedir, "/", { plain = true })
+  local project = (#parts >= 2)
+    and (parts[#parts - 1] .. "_" .. parts[#parts])
+    or parts[#parts]
+  project = project:gsub("[^%w_%-]", "_")
+
+  local dest_dir = THOUGHTS_REPO .. "/" .. project
+  local dest     = dest_dir .. "/thoughts.lua"
+
+  local script = table.concat({
+    "mkdir -p " .. vim.fn.shellescape(dest_dir),
+    "cp " .. vim.fn.shellescape(src) .. " " .. vim.fn.shellescape(dest),
+    "cd " .. vim.fn.shellescape(THOUGHTS_REPO),
+    "git add " .. vim.fn.shellescape(project .. "/thoughts.lua"),
+    "git diff --cached --quiet || git commit -m " .. vim.fn.shellescape("sync: " .. project),
+    "git push",
+  }, " && ")
+
+  vim.system({ "bash", "-c", script }, { detach = true }, function(result)
+    if result.code ~= 0 then
+      vim.schedule(function()
+        vim.notify("thoughts sync failed: " .. (result.stderr or ""), vim.log.levels.WARN)
+      end)
+    end
+  end)
 end
 
 local function _save(t, filedir)
@@ -55,6 +89,7 @@ local function _save(t, filedir)
   end
   f:write('return ' .. vim.inspect(t))
   f:close()
+  _sync_to_repo(filedir)
 end
 
 local function delete_line(filedir, filename, linenumber)
