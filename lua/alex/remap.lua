@@ -20,7 +20,7 @@ vim.api.nvim_set_keymap("n", "<leader>co", ":copen<CR>", {})
 vim.api.nvim_set_keymap("n", "<leader>cc", ":cclose<CR>", {})
 
 -- quickererrer
-vim.api.nvim_set_keymap("n", "<leader>l", ":lua QuickerNewThought()<CR> :lua QuickerSetAllMarks()<CR>", {})
+vim.keymap.set("n", "<leader>l", function() QuickerNewThought() end, {})
 vim.api.nvim_set_keymap("n", "<leader>fl", ":lua QuickerSearchThoughts()<CR>", {})
 
 -- claude plan viewer

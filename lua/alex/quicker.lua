@@ -1,6 +1,6 @@
 local main_color = "#7fc8f8"
 local namespace = vim.api.nvim_create_namespace("QuickerSymbols")
-local mark_icon = " "
+local mark_icon = " "
 local mark_highlight_group = "QuickerBorder"
 
 local function set_status_symbol(bufnr, line)
@@ -22,7 +22,12 @@ local function _load(filedir)
 end
 
 local function _save(t, filedir)
-  local f = assert(io.open(_db_path(filedir), 'w'))
+  local path = _db_path(filedir)
+  local f, err = io.open(path, 'w')
+  if not f then
+    vim.notify("thoughts: could not save — " .. (err or "unknown error"), vim.log.levels.ERROR)
+    return
+  end
   f:write('return ' .. vim.inspect(t))
   f:close()
 end
@@ -53,12 +58,12 @@ local function save_line(filedir, filename, linenumber, text, timestamp)
   end
   if found then
     found.text = text
+    found.timestamp = timestamp
   else
     table.insert(list, { linenumber = linenumber, text = text, timestamp = timestamp })
   end
   _save(db, filedir)
-  vim.notify("saved thought")
-  return found or list[#list]
+  vim.notify("thought saved")
 end
 
 local function fetch_line(filedir, filename, linenumber)
@@ -142,6 +147,7 @@ local function save_thoughts_lua(float_buf, filedir, filename, linenumber)
   local text = table.concat(vim.api.nvim_buf_get_lines(float_buf, 0, -1, false), "\n")
   if text == "" then
     delete_line(filedir, filename, linenumber)
+    vim.notify("thought cleared")
     return
   end
   local timestamp = os.date("!%H:%M:%S %d-%m-%Y ")
@@ -155,10 +161,21 @@ function QuickerNewThought()
   local filedir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(main_buf), ':p:h')
   local linenumber = vim.api.nvim_win_get_cursor(main_win)[1]
 
+  if filename == '' then
+    vim.notify("thoughts: save the file first", vim.log.levels.WARN)
+    return
+  end
+
+  if vim.fn.isdirectory(filedir) == 0 then
+    vim.notify("thoughts: directory does not exist — " .. filedir, vim.log.levels.WARN)
+    return
+  end
+
   local line = fetch_line(filedir, filename, linenumber)
   local buf = vim.api.nvim_create_buf(false, true)
 
-  if line.text then
+  local is_new = not line.text
+  if not is_new then
     local lines = vim.split(line.text, "\n", { plain = true })
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   end
@@ -203,6 +220,10 @@ function QuickerNewThought()
   vim.keymap.set("n", "q", close, { buffer = buf })
   vim.keymap.set("n", "<Esc>", close, { buffer = buf })
   vim.keymap.set("n", "D", delete_and_close, { buffer = buf })
+
+  if is_new then
+    vim.cmd("startinsert")
+  end
 end
 
 function QuickerSearchThoughts()
