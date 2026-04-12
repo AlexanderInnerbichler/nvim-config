@@ -2,11 +2,11 @@ local main_color = "#7fc8f8"
 local namespace = vim.api.nvim_create_namespace("QuickerSymbols")
 
 local TAGS = {
-  { prefix = "#todo", icon = " ", hl = "QuickerTodo",     color = "#f59e0b" },
-  { prefix = "#bug",  icon = " ", hl = "QuickerBug",      color = "#f87171" },
-  { prefix = "#q",    icon = " ", hl = "QuickerQuestion", color = "#a78bfa" },
+  { prefix = "#todo", icon = "󰄱 ", hl = "QuickerTodo",     color = "#f59e0b" },
+  { prefix = "#bug",  icon = " ",  hl = "QuickerBug",      color = "#f87171" },
+  { prefix = "#q",    icon = " ",  hl = "QuickerQuestion", color = "#a78bfa" },
 }
-local DEFAULT_ICON = " "
+local DEFAULT_ICON = " "
 local DEFAULT_HL   = "QuickerBorder"
 
 local function get_tag(text)
