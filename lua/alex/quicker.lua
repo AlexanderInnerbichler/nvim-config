@@ -1,11 +1,36 @@
 local main_color = "#7fc8f8"
 local namespace = vim.api.nvim_create_namespace("QuickerSymbols")
-local mark_icon = " "
-local mark_highlight_group = "QuickerBorder"
 
-local function set_status_symbol(bufnr, line)
+local TAGS = {
+  { prefix = "#todo", icon = "󰄬 ", hl = "QuickerTodo",     color = "#f59e0b" },
+  { prefix = "#bug",  icon = "  ", hl = "QuickerBug",      color = "#f87171" },
+  { prefix = "#q",    icon = "  ", hl = "QuickerQuestion", color = "#a78bfa" },
+}
+local DEFAULT_ICON = " "
+local DEFAULT_HL   = "QuickerBorder"
+
+local function get_tag(text)
+  if not text then return nil end
+  for _, t in ipairs(TAGS) do
+    if text:sub(1, #t.prefix) == t.prefix then return t end
+  end
+  return nil
+end
+
+local function setup_tag_highlights()
+  for _, t in ipairs(TAGS) do
+    vim.api.nvim_set_hl(0, t.hl, { fg = t.color, bg = "NONE" })
+  end
+end
+setup_tag_highlights()
+vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_tag_highlights })
+
+local function set_status_symbol(bufnr, line, text)
+  local tag  = get_tag(text)
+  local icon = tag and tag.icon or DEFAULT_ICON
+  local hl   = tag and tag.hl   or DEFAULT_HL
   vim.api.nvim_buf_set_extmark(bufnr, namespace, line, 0, {
-    virt_text = { { mark_icon, mark_highlight_group } },
+    virt_text = { { icon, hl } },
     virt_text_pos = "inline",
     right_gravity = true,
   })
@@ -84,7 +109,7 @@ local function refresh_marks(buf, filedir, filename)
   local db = _load(filedir)
   db[filename] = db[filename] or {}
   for _, e in ipairs(db[filename]) do
-    set_status_symbol(buf, e.linenumber - 1)
+    set_status_symbol(buf, e.linenumber - 1, e.text)
   end
 end
 
@@ -101,7 +126,7 @@ function QuickerSetAllMarks()
   local db = _load(filedir)
   db[filename] = db[filename] or {}
   for _, e in ipairs(db[filename]) do
-    set_status_symbol(buf, e.linenumber - 1)
+    set_status_symbol(buf, e.linenumber - 1, e.text)
   end
 end
 
@@ -182,7 +207,9 @@ function QuickerNewThought()
 
   local ui = vim.api.nvim_list_uis()[1]
   local width, height = 40, 10
-  local title = " " .. tostring(linenumber) .. "   THOUGHT "
+  local tag = get_tag(line.text)
+  local tag_label = tag and (" · " .. tag.prefix) or ""
+  local title = " " .. tostring(linenumber) .. "   THOUGHT" .. tag_label .. " "
   vim.api.nvim_set_option_value('modifiable', true, { buf = buf })
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
@@ -226,7 +253,7 @@ function QuickerNewThought()
   end
 end
 
-function QuickerSearchThoughts()
+function QuickerSearchThoughts(tag_filter)
   local ok_p, pickers = pcall(require, 'telescope.pickers')
   local ok_f, finders = pcall(require, 'telescope.finders')
   local ok_c, conf_mod = pcall(require, 'telescope.config')
@@ -248,28 +275,34 @@ function QuickerSearchThoughts()
       local dir = vim.fn.fnamemodify(path, ':h')
       for fname, list in pairs(db) do
         for _, e in ipairs(list) do
-          local short = e.text:gsub('\n', ' ')
-          table.insert(entries, {
-            display = string.format("%s:%d  %s", fname, e.linenumber, short),
-            filename = dir .. '/' .. fname,
-            lnum = e.linenumber,
-          })
+          if not tag_filter or e.text:sub(1, #tag_filter) == tag_filter then
+            local t = get_tag(e.text)
+            local icon = t and t.icon or DEFAULT_ICON
+            local short = e.text:gsub('\n', ' ')
+            table.insert(entries, {
+              display = string.format("%s%s:%d  %s", icon, fname, e.linenumber, short),
+              ordinal = string.format("%s:%d  %s", fname, e.linenumber, short),
+              filename = dir .. '/' .. fname,
+              lnum = e.linenumber,
+            })
+          end
         end
       end
     end
   end
 
+  local title = tag_filter and ("Thoughts · " .. tag_filter) or "Thoughts"
   pickers.new({}, {
-    prompt_title = "Thoughts",
+    prompt_title = title,
     finder = finders.new_table({
       results = entries,
       entry_maker = function(e)
         return {
-          value = e,
-          display = e.display,
-          ordinal = e.display,
+          value    = e,
+          display  = e.display,
+          ordinal  = e.ordinal,
           filename = e.filename,
-          lnum = e.lnum,
+          lnum     = e.lnum,
         }
       end,
     }),
@@ -302,7 +335,7 @@ vim.api.nvim_create_autocmd("BufReadPost", {
     local list = db[filename]
     if not list then return end
     for _, e in ipairs(list) do
-      set_status_symbol(ev.buf, e.linenumber - 1)
+      set_status_symbol(ev.buf, e.linenumber - 1, e.text)
     end
   end,
 })

@@ -22,6 +22,12 @@ vim.api.nvim_set_keymap("n", "<leader>cc", ":cclose<CR>", {})
 -- quickererrer
 vim.keymap.set("n", "<leader>l", function() QuickerNewThought() end, {})
 vim.api.nvim_set_keymap("n", "<leader>fl", ":lua QuickerSearchThoughts()<CR>", {})
+vim.keymap.set("n", "<leader>ft", function()
+  vim.ui.select({ "#todo", "#bug", "#q", "all" }, { prompt = "Filter thoughts by tag:" }, function(choice)
+    if not choice then return end
+    QuickerSearchThoughts(choice == "all" and nil or choice)
+  end)
+end, {})
 
 -- claude plan viewer
 vim.keymap.set("n", "<leader>pv", function() require("alex.plan_viewer").toggle() end, { desc = "Toggle plan viewer" })
