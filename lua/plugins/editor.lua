@@ -1,4 +1,5 @@
 return {
+  { "nvim-tree/nvim-web-devicons" },
   { "tpope/vim-fugitive" },
   { "voldikss/vim-floaterm" },
   { "HakonHarnes/img-clip.nvim" },

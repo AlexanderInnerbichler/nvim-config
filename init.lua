@@ -18,6 +18,7 @@ require("lazy").setup({
   spec = {
     { import = "plugins" },
   },
+  dev = { path = vim.fn.expand("~/") },
   install = { colorscheme = { "vesper" } },
   checker = { enabled = false },
 })

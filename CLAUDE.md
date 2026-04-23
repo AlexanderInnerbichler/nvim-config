@@ -23,6 +23,12 @@ Auto-generated from all feature plans. Last updated: 2026-04-09
 - `~/.config/nvim/gh-user-watchlist.json` — atomic JSON read/write (same pattern as `gh-watchlist.json`) (011-user-watch-activity)
 - Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0 (REST + GraphQL), `vim.system()` (async), `nvim_open_win` (floating windows) (012-watched-user-profile-popup)
 - N/A — no persistence; data fetched fresh on each popup open (012-watched-user-profile-popup)
+- Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0, `vim.system()` async, `nvim_open_win` floating windows (013-heatmap-drilldown)
+- N/A — events fetched fresh on each popup open (013-heatmap-drilldown)
+- Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0, `vim.system()` async, `gh_reader.lua` (existing `open_popup`, `write_buf`) (014-pr-diff-viewer)
+- N/A — diff fetched fresh on each open (014-pr-diff-viewer)
+- Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0, `gh api` (REST), `gh_reader.lua` (existing `open_popup`, `write_buf`, `M.open_input`) (015-diff-line-comment)
+- N/A — comment posted immediately, not cached (015-diff-line-comment)
 
 - Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0 (system), `vim.system()` (built-in async), `xdg-open` (browser) (001-github-dashboard)
 
@@ -42,9 +48,8 @@ tests/
 Lua (LuaJIT 2.1), Neovim 0.12.0-dev: Follow standard conventions
 
 ## Recent Changes
-- 012-watched-user-profile-popup: Added Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0 (REST + GraphQL), `vim.system()` (async), `nvim_open_win` (floating windows)
-- 011-user-watch-activity: Added Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0, `gh_reader.lua` (existing), `vim.system()` (built-in async), `vim.uv.fs_rename` (built-in atomic writes)
-- 010-org-team-activity: Added Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0, `gh_reader.lua` (existing), `vim.system()` (built-in async)
+- 015-diff-line-comment: Added Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0, `gh api` (REST), `gh_reader.lua` (existing `open_popup`, `write_buf`, `M.open_input`)
+- 014-pr-diff-viewer: Added Lua (LuaJIT 2.1), Neovim 0.12.0-dev + `gh` CLI v2.45.0, `vim.system()` async, `gh_reader.lua` (existing `open_popup`, `write_buf`)
 
 
 <!-- MANUAL ADDITIONS START -->
