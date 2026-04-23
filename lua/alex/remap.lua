@@ -66,6 +66,9 @@ vim.keymap.set("n", "<leader>gw", function() require("gh_dashboard.watchlist").t
 vim.keymap.set("n", "<leader>gn", function() require("gh_dashboard.watchlist").open_latest() end, { desc = "Open latest GitHub notification" })
 vim.keymap.set("n", "<leader>gu", function() require("gh_dashboard.user_watchlist").toggle() end, { desc = "Toggle GitHub User Watchlist" })
 
+-- diary
+vim.keymap.set("n", "<leader>dd", function() require("alex.diary").open_today() end, { desc = "Open today's diary" })
+
 -- neotest
 vim.keymap.set("n", "<leader>na", "<cmd>Neotest attach<cr>", { desc = "Neotest - Run All Tests" })
 vim.keymap.set("n", "<leader>nj", "<cmd>Neotest jump<cr>", { desc = "Neotest - Run File Tests" })

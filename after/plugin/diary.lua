@@ -1,0 +1,1 @@
+require("alex.diary").setup()
