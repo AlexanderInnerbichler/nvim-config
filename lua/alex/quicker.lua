@@ -52,22 +52,22 @@ local function _sync_to_repo(filedir)
   local src = _db_path(filedir)
   if vim.fn.filereadable(src) == 0 then return end
 
-  -- derive project name from the directory (last two path components)
-  local parts = vim.split(filedir, "/", { plain = true })
-  local project = (#parts >= 2)
-    and (parts[#parts - 1] .. "_" .. parts[#parts])
-    or parts[#parts]
-  project = project:gsub("[^%w_%-]", "_")
+  -- derive project name from git root basename (falls back to dirname)
+  local root_result = vim.fn.systemlist(
+    "git -C " .. vim.fn.shellescape(filedir) .. " rev-parse --show-toplevel 2>/dev/null")
+  local root    = (root_result and #root_result > 0) and root_result[1] or filedir
+  local project = (root:match("[^/]+$") or "unknown"):gsub("[^%w_%-]", "_")
 
-  local dest_dir = THOUGHTS_REPO .. "/" .. project
+  local dest_dir = THOUGHTS_REPO .. "/code/" .. project
   local dest     = dest_dir .. "/thoughts.lua"
 
   local script = table.concat({
     "mkdir -p " .. vim.fn.shellescape(dest_dir),
     "cp " .. vim.fn.shellescape(src) .. " " .. vim.fn.shellescape(dest),
     "cd " .. vim.fn.shellescape(THOUGHTS_REPO),
-    "git add " .. vim.fn.shellescape(project .. "/thoughts.lua"),
+    "git add " .. vim.fn.shellescape("code/" .. project .. "/thoughts.lua"),
     "git diff --cached --quiet || git commit -m " .. vim.fn.shellescape("sync: " .. project),
+    "git pull --rebase",
     "git push",
   }, " && ")
 
