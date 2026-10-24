@@ -65,7 +65,9 @@ vim.keymap.set("n", "<leader>gh", function() require("gh_dashboard").toggle() en
 vim.keymap.set("n", "<leader>gw", function() require("gh_dashboard.watchlist").toggle() end, { desc = "Toggle GitHub Watchlist" })
 vim.keymap.set("n", "<leader>gn", function() require("gh_dashboard.watchlist").open_latest() end, { desc = "Open latest GitHub notification" })
 vim.keymap.set("n", "<leader>gu", function() require("gh_dashboard.user_watchlist").toggle() end, { desc = "Toggle GitHub User Watchlist" })
-vim.keymap.set("n", "<leader>gr", ":GhRepoPicker<CR>", { desc = "open repo finder" })
+
+-- github pr diff (current branch; :GhDiff <n> [owner/repo] for any other)
+vim.keymap.set("n", "<leader>gp", ":GhDiff<CR>", { desc = "Diff PR for current branch" })
 
 -- diary
 vim.keymap.set("n", "<leader>dd", function() require("alex.diary").open_today() end, { desc = "Open today's diary" })
